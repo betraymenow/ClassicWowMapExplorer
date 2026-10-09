@@ -1,296 +1,368 @@
-# MapExplorer
+# Map Explorer 한국어 포크 (클래식 + 리테일)
 
-Fly over the World of Warcraft world, drawn from your own game install. Everything is read straight from the game files on your computer; nothing is hosted, uploaded or downloaded.
+내 컴퓨터에 설치된 **월드 오브 워크래프트(WoW)** 게임 파일을 직접 읽어서, 아제로스를 하늘에서 날아다니며 구경할 수 있는 웹 앱입니다.
+게임에 로그인하지 않아도 되고, 인터넷도 필요 없습니다. 지도·지형·건물·물·하늘이 모두 **내 PC의 게임 데이터**에서 그려집니다.
 
-Built for WoW Classic, with Eastern Kingdoms and Kalimdor loaded as one seamless world.
+이 저장소는 [Coldensjo/ClassicWowMapExplorer](https://github.com/Coldensjo/ClassicWowMapExplorer)(v0.3.1)를 **포크**해서 고친 버전입니다.
+원작은 WoW 클래식용이고, 이 포크는 여기에 아래 기능을 더했습니다.
 
-## Get started on Windows
+- **리테일(본섭) 에디션**: 칼림도어, 동부 왕국에 더해 **줄다자르**까지 리테일 지형으로 볼 수 있습니다.
+- **창 하나에서 클래식 ⇄ 리테일 전환** 버튼
+- **낮과 밤이 제대로 바뀌도록** 조명 데이터 읽기 수정 (클래식 에라·리테일 클라이언트용)
+- 한낮 지형이 주황빛으로 물들던 문제를 **자연스러운 색감**으로 보정
+- **단축키 재배치** (E S D F 이동 등, 아래 표 참고)
+- 창이 **백그라운드에 있으면 소리 자동 음소거**
 
-You need **Windows 10 or 11** and **World of Warcraft Classic** installed. Nothing else to install.
-On Linux, see **[Get started on Linux](#get-started-on-linux)**.
+> 원작자의 영어 설명서는 [README.en.md](README.en.md)에 그대로 남겨 두었습니다.
 
-1. Download **MapExplorer-portable.zip** from the
-   **[latest release](https://github.com/Coldensjo/ClassicWowMapExplorer/releases/latest)** and unzip
-   it anywhere.
-2. Double-click **MapExplorer.exe**. Map Explorer opens in a window of its own.
-   The first time, Windows may say *"Windows protected your PC"*, because the program isn't signed:
-   click **More info**, then **Run anyway**.
-3. It finds World of Warcraft by itself and the world opens. If it can't find it, click
-   **Choose your World of Warcraft folder** (or drag the folder onto the window) and pick the
-   folder that contains `_classic_` or `_classic_beta_`, usually
-   `C:\Program Files (x86)\World of Warcraft`. The window calls it an upload, but the files never
-   leave your computer.
+---
 
-Click to look around, fly with **W A S D**, and hold **Shift** to go faster.
-Close the window when you're done.
+## 목차
 
-### About the portable version
+1. [무엇을 할 수 있나요?](#무엇을-할-수-있나요)
+2. [필요한 것](#필요한-것)
+3. [설치 방법 (Windows, 추천)](#설치-방법-windows-추천)
+4. [소스에서 바로 실행하기 (개발 서버)](#소스에서-바로-실행하기-개발-서버)
+5. [사용법](#사용법)
+6. [단축키 전체 목록](#단축키-전체-목록)
+7. [낮과 밤 바꾸기](#낮과-밤-바꾸기)
+8. [클래식 ⇄ 리테일 전환](#클래식--리테일-전환)
+9. [리테일 에디션 안내와 한계](#리테일-에디션-안내와-한계)
+10. [자주 묻는 질문 / 문제 해결](#자주-묻는-질문--문제-해결)
+11. [이 포크에서 바뀐 점 (개발자용)](#이-포크에서-바뀐-점-개발자용)
+12. [저작권과 출처](#저작권과-출처)
 
-- **It's portable**: no installer and no admin rights. Keep `MapExplorer.exe` next to its `app`
-  folder; to remove it, delete the folder.
-- **Its own window**: the window is Microsoft Edge (or Chrome, if Edge is missing) in app mode,
-  showing Map Explorer with no tabs or address bar. `MapExplorer.exe` serves the `app` folder to it
-  at `http://127.0.0.1:51730`, reachable from this computer only, and stops when you close the
-  window.
-- **Finding the game**: it looks where World of Warcraft's installer says it is, then in the usual
-  folders on each hard drive, and serves only the game's `.build.info` and `Data` folder to the
-  window, read as they are.
-- **Its own settings**: highlights and other settings are kept in a `data` folder beside it, apart
-  from your own browser (in `%LOCALAPPDATA%\MapExplorer` if its folder is read-only).
-- **Opening it again** while it's running opens another window onto the same Map Explorer.
+---
 
-### Running from source
+## 무엇을 할 수 있나요?
 
-On any system with Chrome or Edge, and **[Node.js](https://nodejs.org)** (the LTS version):
+- 동부 왕국과 칼림도어를 **하나로 이어진 세계**로 자유롭게 날아다니기
+- 지형 텍스처, 물과 용암, 건물과 소품, 풀·꽃 같은 바닥 장식, 불·연기 파티클
+- 게임 자체의 조명 데이터로 그린 **하늘, 안개, 시간대별 빛** (시간 조절 가능)
+- 지역 이름과 **지역 음악**, 지역별 환경음 (새소리, 바람, 도시 소음 등)
+- 비·눈·모래폭풍 같은 **날씨**
+- 게임 속 **세계 지도**와 **미니맵**, 지역·마을 **검색**으로 순간 이동
+- **걷기 모드**: 캐릭터를 땅에 내려 게임처럼 뛰고, 점프하고, 수영하기
+- (클래식) VMaNGOS 데이터로 만든 **NPC·몬스터**, 비행 경로, 배·비행선 운항, 던전 입구와 만남의 돌
+- (리테일) 칼림도어·동부 왕국·**줄다자르**를 리테일 지형으로 비행
 
-1. `git clone https://github.com/Coldensjo/ClassicWowMapExplorer.git` (or **Code → Download ZIP**)
-2. In the project folder, run `npm install`, then `npm run dev`.
-3. Open **http://localhost:5173** in Chrome or Edge. The dev server finds World of Warcraft as the
-   portable version does (set `WOW_DIR` to point it elsewhere); if it can't, choose the folder as above.
+---
 
-## Get started on Linux
+## 필요한 것
 
-There's no portable version for Linux; Map Explorer runs from source instead. You need
-**World of Warcraft Classic** installed through Wine, Lutris, Bottles, Steam (Proton) or Heroic,
-a Chromium-based browser (**Chrome**, **Chromium**, **Edge** or **Brave**), **git**, and
-**[Node.js](https://nodejs.org)** 22.12 or newer.
+| 항목 | 내용 |
+|---|---|
+| 운영체제 | Windows 10 또는 11 (리눅스·맥은 [소스에서 실행](#소스에서-바로-실행하기-개발-서버)) |
+| 게임 | Battle.net으로 설치한 **WoW 클래식**(클래식 에라 포함). 리테일 에디션을 쓰려면 **리테일(본섭)**도 설치되어 있어야 합니다. |
+| 브라우저 | Microsoft Edge 또는 Chrome (Windows에는 Edge가 기본으로 있습니다) |
+| 직접 빌드할 때만 | [Node.js](https://nodejs.org) 22.12 이상 (LTS 권장), git |
 
-1. Install git and Node.js. Many distributions ship an older Node.js, so check with `node -v`; if
-   it's older than 22.12, install the current LTS from [nodejs.org](https://nodejs.org/en/download) or with
-   [nvm](https://github.com/nvm-sh/nvm):
+게임은 보통 `C:\Program Files (x86)\World of Warcraft` 에 설치되어 있고, 그 안에 `_classic_era_`, `_classic_`, `_retail_` 같은 폴더가 있습니다.
+앱은 이 폴더를 **읽기만** 하고, 어떤 파일도 수정하거나 밖으로 보내지 않습니다.
 
-   ```sh
-   # Debian / Ubuntu
-   sudo apt install git nodejs npm
-   # Fedora
-   sudo dnf install git nodejs npm
-   # Arch
-   sudo pacman -S git nodejs npm
-   ```
+---
 
-2. Download Map Explorer and its packages:
+## 설치 방법 (Windows, 추천)
 
-   ```sh
-   git clone https://github.com/Coldensjo/ClassicWowMapExplorer.git
-   cd ClassicWowMapExplorer
-   npm install
-   ```
+원작의 **포터블 실행 파일**(`MapExplorer.exe`)에 이 포크에서 빌드한 앱을 넣어 쓰는 방법입니다.
+실행 파일은 원작자 릴리스를 그대로 쓰고, 화면에 보이는 앱 부분(`app` 폴더)만 이 포크의 것으로 바꿉니다.
 
-3. Start it:
+### 1단계. 원작 포터블 버전 받기
 
-   ```sh
-   npm run dev
-   ```
+1. [원작 v0.3.1 릴리스](https://github.com/Coldensjo/ClassicWowMapExplorer/releases/tag/v0.3.1)에서 **MapExplorer-portable.zip**을 받습니다.
+2. 원하는 곳에 압축을 풉니다. 예: `C:\Tools\MapExplorer\`
+   압축을 풀면 `MapExplorer\MapExplorer.exe`와 `MapExplorer\app\` 폴더가 생깁니다.
 
-   It looks for World of Warcraft in your Wine prefixes: `$WINEPREFIX`, `~/.wine`, `~/Games`
-   (Lutris), the prefixes in Lutris's game files, Heroic's prefixes, Bottles and Steam's Proton
-   prefixes, including their Flatpak versions. It prints where it found the game, or
-   *World of Warcraft not found*.
+### 2단계. 이 포크 빌드하기
 
-4. Open **http://localhost:5173** in your browser and the world opens.
+명령 프롬프트(또는 PowerShell)를 열고 차례대로 실행합니다.
 
-If it doesn't find the game, point it at the folder that contains `_classic_` or `_classic_beta_`:
-
-```sh
-WOW_DIR="$HOME/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft" npm run dev
+```bash
+git clone -b ko-edition https://github.com/betraymenow/ClassicWowMapExplorer.git
 ```
 
-or click **Choose your World of Warcraft folder** in the page and pick it there.
-
-Press **Ctrl+C** in the terminal to stop it. To update later, run `git pull` and `npm install` in the
-`ClassicWowMapExplorer` folder.
-
-## Features
-
-- The whole world at once: distant terrain for both continents, with full detail streamed in around you
-- Terrain textures, water and other liquids, with the game's underwater look and sound
-- Buildings and props placed as in the game, with animated fire, smoke and sparks; how far props, trees and NPCs show is set in the View panel
-- Ground clutter: the grass, flowers and pebbles that grow on each terrain texture, swaying in the wind; how far it reaches is set in the View panel (25–400 yards)
-- Sky, fog and lighting from the game's own light data, with a time-of-day control
-- Zone names and zone music, including inside inns, Ironforge and other buildings
-- Each area's background sounds (birds, wind, wildlife, city bustle), by day and by night, cross-faded
-  as you fly between areas and fading away high above the ground; inns and other rooms have their own
-- Creatures and objects from VMaNGOS: clickable, with Wowhead links, name plates, their gear and
-  animations, walking their patrols, with the game's footsteps for what they walk on
-- Every other map in the install (dungeons, raids, battlegrounds, unused and test maps) laid out in
-  the sea south of the continents, optionally named from afar, to fly to or walk into through their entrances
-- Meeting stones outside every dungeon, with its name and levels, to be summoned to or step through into the dungeon
-- Highlights for chests, herbs, ore veins, fishing pools, meeting stones or anything by name, seen from afar
-- Ground tints read from the game's and server's data: the graveyard dying there sends you to,
-  faction territory, creature levels against yours, subzones with their exploration XP, and fishing skill
-- Inns and cities where resting builds up, drawn as the server's own trigger shapes
-- The flight network, drawn over the world, and rides along it the way the game routes you
-- Boats and zeppelins sailing and flying their routes on the server's schedule, to go aboard and ride
-- Rain, snow and sandstorms from each zone's seasonal chances, with the game's weather sounds
-- The game's world map, its explored parts filled in as you fly over them, with a click to go anywhere
-- A minimap from the game's own map images, and a search to go to any zone, town or map
-- Walking: a character of any race the install has models for, dressed as one of its NPCs, run,
-  jumped and swum around the world as in the game, with a camera that follows behind
-
-## Controls
-
-| Key | Action |
-| --- | --- |
-| Click | Capture the mouse to look around, or open info on a creature or object |
-| W A S D / arrows | Move |
-| Space / E, C / Q | Up, down |
-| Shift | Move faster |
-| G | Go through walls, floors and the ground on / off |
-| Mouse wheel | Zoom |
-| 1, 2 | Jump to a continent |
-| O | Overview of the whole world |
-| R | Return to the start position |
-| T / Shift+T | Hold to run the time of day forward / back |
-| N | Reset time to the local clock |
-| L | Torch light on / off |
-| V | Ground clutter (grass, flowers, pebbles) on / off |
-| F | Switch name plate colours between Alliance and Horde |
-| M | Music and sound on / off |
-| I | Names of dungeons, raids and other maps in the sea on / off (off by default) |
-| H | Highlights on / off |
-| Tab | World map |
-| Esc | Get off a flight, boat or zeppelin |
-| / | Go to a zone, town or map |
-| K | Performance stats on / off |
-| P | Screenshot, with everything in view loaded in full detail |
-| U or Alt+Z | Hide / show the interface |
-| ? or F1 | List of controls |
-
-**Walking** (the key left of 1, labelled <kbd>`</kbd> on US keyboards and <kbd>§</kbd> on Nordic ones,
-or *Walk on the ground* in the Travel menu) drops a character from where the camera is, facing the
-way the camera looks, to the ground below, and moves it as in World of Warcraft. The same key flies again from
-where the walking camera was.
-
-| Key | Action |
-| --- | --- |
-| W / S | Run forward / backpedal |
-| A / D | Turn; strafe while the right mouse button is held |
-| Q / E | Strafe |
-| Space | Jump; in water, swim up, and at the surface jump out |
-| X | In water, swim down |
-| \ (the key left of Enter on many layouts) or numpad / | Walk / run |
-| Left mouse button drag | Hides the mouse and turns the camera round the character (a click still selects creatures and objects) |
-| Right mouse button held | Hides the mouse, which then turns the character too; both buttons run forward |
-| Mouse wheel | Camera nearer / further (up to 35 yards) |
-
-The speeds, the jump and the falling are the game's (the server emulators' constants: 7 yards a
-second running, 4.5 backpedalling, 4.72 swimming). There's no steering in the air beyond the way you
-jumped. Steps up to a yard high are walked up; ground steeper than 50 degrees (see *Walkable slopes*
-in Highlight) can't be climbed, and you slide down it. Buildings, caves and mines are solid and can be
-walked into, up their stairs and across their floors; trees, fences and other props are not.
-Water deeper than about two thirds of your height is swum in, and a shore climbs out of it. Dungeon
-entrances take you in on foot. Nothing fights back: it's a sandbox.
-
-The Travel menu chooses who walks: the race and sex (those the install has models for), the classic
-or HD model, and the outfit: a Stormwind City Guard's, with sword and shield (the default; guards are
-human), or any NPC's look of that race, simply dressed ones first. The choice is remembered.
-Flying anywhere (a flight path, Go to, the minimap, R, O) ends walking.
-
-Every key that switches something shows what it did, low in the middle of the screen. All of them are
-also in the **View** and **Sound** menus at the top left, which remember your choices between visits.
-
-**Go to** (top right, or press /) finds any zone, town or landmark by name, and every map in the
-install, including ones nothing leads to. Empty, it lists the maps by kind. The other maps also sit
-in rows in the sea south of the continents, with their names floating over them (press I), so you can fly there.
-Maps that are a single building (most dungeons) lie under the sea until you fly over them.
-
-**Meeting stones** stand outside the dungeons. Click one to see its dungeon and level range, and to
-enter the dungeon. The Travel menu lists them all by continent, lowest levels first: **Go to stone**
-puts you in front of one, as a summons does (on foot if you're walking), and **Enter dungeon** takes you
-in through the entrance nearest the stone.
-
-The **minimap** above it shows the game's own map around you, north up. Click it to fly there, and
-zoom it with the wheel or its + and − buttons.
-
-**Highlight** (top left) marks chests, herbs, ore, fishing pools and meeting stones within 1000 yards, through
-terrain and buildings; typing a name marks every creature or object with that name on the map, however far away.
-The spawn data lists every place a herb or vein can appear, so there are more marks than nodes up at any one time.
-**Ground** tints the terrain by region, and the panel says what applies under the camera:
-- *Graveyards*: where you'd be sent after dying there, as the server picks it (the graveyards linked to
-  the zone you die in, the nearest of those); dark lines mark where two meet.
-- *Territory*: friendly, hostile, contested or free-for-all, as the PvP status names it.
-- *Creature levels*: each area's typical creature levels, coloured as their names would be for the level you set.
-- *Subzones and exploration*: every subzone in its own colour, with the XP for discovering it.
-- *Fishing skill*: the skill each zone's waters are rated at, and from what skill nothing gets away.
-
-Graveyards, territory and flight paths are for the side chosen under *Name colours* (<kbd>F</kbd>).
-**Rested areas** shows the inns and cities where resting builds up.
-
-**Travel** shows the flight paths and flies you along them, from one flight master to another through
-any in between, as the game would; move or press <kbd>Esc</kbd> to get off. Under **Boats and zeppelins**
-it lists the ships and zeppelins, which keep the server's timetable: each round trip takes as long
-as on the realms, waiting a minute at each dock, so one is in the same place at the same moment for
-everyone. *Go to* puts you on board where it is now; *Ride* takes you along, holding still while it
-docks and crossing to the other continent with it, until you move or press <kbd>Esc</kbd>. The panel
-says when the next one leaves the dock nearest you, and where it goes. It also opens the
-**world map** (<kbd>Tab</kbd>): the game's zone maps, filled in where the camera has been down among
-an area (remembered between visits), with the camera's place on it; click a zone to fly there.
-
-**Weather** (View menu) follows each zone's chances for the season, rolled again every ten minutes as
-on the realms, or is set to one kind everywhere.
-
-The camera position is kept in the URL, so a link brings you back to the same spot; click the coordinates
-(top left) to copy it. Walking, it's the walking camera's place, and the link opens there flying.
-Add `?time=HH:MM` to set the time of day.
-
-
-## Troubleshooting
-
-- **"That isn't the World of Warcraft folder"**: pick the folder one level up, the one that
-  contains `_classic_` or `_classic_beta_`.
-- **Direct access** (under *More options*) opens faster, but Chrome and Edge refuse folders under
-  `Program Files`; use the main button for those.
-- If nothing shows up, check that you're in Chrome or Edge with hardware acceleration on (for the
-  portable version: Edge's *Settings → System and performance*), and that your graphics driver is
-  up to date.
-- **The portable version opened in a normal browser tab**: neither Edge nor Chrome was found, so
-  your default browser is used. Press OK in the small Map Explorer message when you're done, to stop it.
-- **"No free port between 51730 and 51749"**: other programs are using those ports; close them or
-  restart your computer.
-
-## For developers
-
-### Spawn data
-
-Creature and object spawns, patrols and dungeon entrances in `public/spawns` come from the [VMaNGOS](https://github.com/vmangos/core) world database. To rebuild them, download the SQLite database from the VMaNGOS `db_latest` release and run:
-
-```sh
-npm run spawns -- path/to/mangos.sqlite
+```bash
+cd ClassicWowMapExplorer
 ```
 
-This needs `sqlite3` on the PATH. NPC hair textures come from the community listfile, expected at `.cache/listfile.csv`.
-
-Regions in `public/spawns/regions.json`, the flight network in `public/spawns/flights.json` and the boats
-and zeppelins in `public/spawns/transports.json` come from VMaNGOS (areas, graveyard links, inns, weather,
-fishing, and the transports with their round trip times and game objects), each map chunk's area read from
-the game's map files, creature levels from the spawn files (run `npm run spawns` first), the client's
-TaxiNodes, TaxiPath and TaxiPathNode tables (the transports' routes too), GameObjectDisplayInfo for their
-models, and graveyard positions (WorldSafeLocs from classic 1.13.2, downloaded
-from [wago.tools](https://wago.tools) on first run, as this client no longer ships it):
-
-```sh
-npm run regions -- [wowDir] [product] [path/to/mangos.sqlite]
+```bash
+npm install
 ```
 
-### Scripts
+```bash
+npm run build
+```
 
-- `npm run dev`: start the dev server
-- `npm run build`: type-check and build to `dist`
-- `npm run typecheck`: type-check only
-- `npm run probe`: inspect game data from Node
-- `npm run spawns`: rebuild the spawn files
-- `npm run regions`: rebuild the regions, flight paths, boats and zeppelins
-- `npm run portable`: build the portable version into `release/` (the zip for a GitHub release);
-  needs mingw-w64 (gcc, windres), ImageMagick and 7-Zip on the PATH. The launcher is
-  `tools/portable/launcher.c`, its icon `public/icon.svg`
+빌드가 끝나면 `dist` 폴더가 생깁니다.
 
-`inspector.html` is a small test page for browsing the storage and file formats.
+- `dist\` : 클래식 에디션
+- `dist\retail\` : 리테일 에디션
 
-### Layout
+### 3단계. app 폴더 바꾸기
 
-- `src/casc`: CASC storage reader
-- `src/formats`: WoW file formats (ADT, WDT, WDL, WMO, M2, BLP, DB2)
-- `src/worker`: storage and parsing in a web worker
-- `src/explorer`: world data, meshes, lighting, spawns, music
-- `src/viewer`: three.js renderer, controls, particles, audio
-- `tools`: Node scripts for probing data and building spawns
+1. 1단계에서 푼 `MapExplorer\app` 폴더를 지우거나 다른 이름(예: `app.original`)으로 바꿉니다.
+2. 2단계의 `dist` 폴더를 `MapExplorer` 폴더 안에 복사하고, 이름을 **`app`** 으로 바꿉니다.
+
+최종 구조는 다음과 같습니다.
+
+```
+MapExplorer\
+├─ MapExplorer.exe
+├─ app\              ← 이 포크의 dist 폴더
+│  ├─ index.html     (클래식)
+│  ├─ assets\ ...
+│  └─ retail\        (리테일)
+└─ README.txt
+```
+
+### 4단계. 실행
+
+1. `MapExplorer.exe`를 더블클릭합니다.
+2. 처음 실행하면 Windows가 **"Windows의 PC 보호"** 경고를 띄울 수 있습니다. 실행 파일에 서명이 없어서 그렇습니다. **추가 정보 → 실행**을 누르면 됩니다.
+3. 앱이 WoW 설치 폴더를 스스로 찾아서 바로 세계가 열립니다.
+   못 찾으면 **Choose your World of Warcraft folder** 버튼을 눌러 `World of Warcraft` 폴더(`_classic_era_` 등이 들어 있는 폴더)를 고르세요.
+
+> **포터블 실행 파일이 하는 일**: `app` 폴더를 내 PC 안에서만 접속되는 주소(`http://127.0.0.1:51730`)로 띄우고, Edge를 탭·주소창 없는 **앱 창**으로 엽니다. 창을 닫으면 함께 종료됩니다. 설정은 exe 옆 `data` 폴더에 저장됩니다.
+
+---
+
+## 소스에서 바로 실행하기 (개발 서버)
+
+포터블 exe 없이, 개발 서버로 실행할 수도 있습니다. 리눅스(Wine 등)나 맥에서도 이 방법을 씁니다.
+
+```bash
+npm install
+```
+
+클래식 에디션:
+
+```bash
+npm run dev
+```
+
+리테일 에디션:
+
+```bash
+npm run dev:retail
+```
+
+그다음 Chrome 또는 Edge에서 **http://localhost:5173** 을 엽니다.
+개발 서버도 WoW 설치 위치를 스스로 찾습니다. 다른 곳에 설치되어 있다면 `WOW_DIR` 환경 변수로 알려 주세요.
+
+```bash
+WOW_DIR="D:/Games/World of Warcraft" npm run dev
+```
+
+> 개발 서버에서는 클래식과 리테일이 서로 다른 서버로 뜨기 때문에 **전환 버튼은 보이지 않습니다.** 전환 버튼은 포터블 방식(위 설치 방법)에서 나타납니다.
+
+---
+
+## 사용법
+
+1. 화면을 **클릭**하면 마우스가 화면에 잡히고, 마우스를 움직여 둘러볼 수 있습니다. **Esc**로 마우스를 풀어 줍니다.
+2. **E S D F** 키로 날아다닙니다(아래 단축키 표 참고). **Shift**를 누르고 있으면 빨라집니다.
+3. 화면 왼쪽 위 메뉴에서 여러 설정을 바꿀 수 있습니다.
+   - **View**: 시간, 비행 속도, 그림자·안개, NPC·오브젝트 표시, 날씨 등
+   - **Sound**: 음악·효과음·환경음 볼륨
+   - **Travel**: 비행 경로 타기, 배·비행선 타기, 걷기 모드
+   - **Highlight**: 상자·약초·광석·낚시터 등을 멀리서도 보이게 강조
+   - **Retail ⇄ / Classic ⇄**: 에디션 전환 ([아래 설명](#클래식--리테일-전환))
+4. 오른쪽 위 검색창(**/** 키)에 지역·마을 이름을 입력하면 그곳으로 이동합니다.
+5. **F1** 또는 **?** 키를 누르면 단축키 도움말이 나옵니다.
+
+---
+
+## 단축키 전체 목록
+
+이 포크는 원작과 단축키가 다릅니다. **바뀐 키는 굵게** 표시했습니다.
+
+### 비행
+
+| 키 | 동작 | 원작 키 |
+|---|---|---|
+| 클릭 / Esc | 마우스로 둘러보기 시작 / 마우스 풀기 | 같음 |
+| **E** / **D** | 앞으로 / 뒤로 | W / S |
+| **S** / **F** | 왼쪽 / 오른쪽 | A / D |
+| Space 또는 **R** | 위로 | Space / E |
+| C 또는 **W** | 아래로 | C / Q |
+| 방향키 | 앞·뒤·좌·우 | 같음 |
+| Shift | 빠르게 | 같음 |
+| 마우스 휠 | 확대 / 축소 | 같음 |
+| G | 벽·바닥·땅 통과 켜기/끄기 | 같음 |
+| J | 시네마틱 카메라 | 같음 |
+
+### 장소 이동
+
+| 키 | 동작 | 원작 키 |
+|---|---|---|
+| / | 지역·마을·맵 검색해서 이동 | 같음 |
+| 1 / 2 / 3 | 동부 왕국 / 칼림도어 / 줄다자르(리테일만) | 1 / 2 |
+| O | 세계 전체 보기 | 같음 |
+| **T** | 시작 위치로 돌아가기 | R |
+| Tab | 세계 지도 | 같음 |
+| Esc | 비행 경로·배·비행선에서 내리기 | 같음 |
+
+### 세계·화면
+
+| 키 | 동작 | 원작 키 |
+|---|---|---|
+| **Y** / **Shift+Y** | 누르고 있는 동안 시간 앞으로 / 뒤로 | T / Shift+T |
+| N | 시간을 내 PC 현재 시각으로 | 같음 |
+| L | 횃불 조명 켜기/끄기 | 같음 |
+| V | 풀·꽃·자갈 장식 켜기/끄기 | 같음 |
+| X | 그림자 켜기/끄기 | 같음 |
+| Z | 안개 켜기/끄기 | 같음 |
+| B | 색보정 켜기/끄기 | 같음 |
+| **H** | 이름표 색 얼라이언스 / 호드 전환 | F |
+| M | 음악·소리 켜기/끄기 | 같음 |
+| I | 바다에 놓인 던전·레이드 이름 (클래식) | 같음 |
+| K | 성능 정보 | 같음 |
+| P | 스크린샷 (보이는 곳을 모두 최고 품질로) | 같음 |
+| U 또는 Alt+Z | 인터페이스 숨기기/보이기 | 같음 |
+| ? 또는 F1 | 단축키 도움말 | 같음 |
+| (키 없음) | 하이라이트 켜기/끄기 → **Highlight 메뉴의 체크박스** 사용 | H |
+| (키 없음) | 비행 속도 올리기/내리기 → **View 메뉴의 Speed 막대** 사용 | Y / Shift+Y |
+
+**Q**와 **A** 키는 이 포크에서 아무 기능도 없습니다.
+
+### 걷기 모드
+
+숫자 1 왼쪽의 **`** 키(또는 Travel 메뉴의 *Walk on the ground*)로 캐릭터를 땅에 내리고, 다시 누르면 비행으로 돌아갑니다.
+
+| 키 | 동작 | 원작 키 |
+|---|---|---|
+| **E** / **D** | 달리기 / 뒷걸음질 | W / S |
+| **S** / **F** | 왼쪽 / 오른쪽으로 돌기 (오른쪽 마우스 버튼을 누르고 있으면 옆걸음) | A / D |
+| **W** / **R** | 왼쪽 / 오른쪽 옆걸음 | Q / E |
+| Space | 점프, 물속에서는 위로 | 같음 |
+| X | 물속에서 아래로 | 같음 |
+| \ 또는 숫자패드 / | 걷기 / 달리기 전환 | 같음 |
+| 왼쪽 마우스 드래그 | 캐릭터 주위로 카메라 돌리기 | 같음 |
+| 오른쪽 마우스 누르고 있기 | 캐릭터도 함께 돌기 (두 버튼 동시에 누르면 앞으로 달리기) | 같음 |
+| 마우스 휠 | 카메라 거리 (최대 35야드) | 같음 |
+
+---
+
+## 낮과 밤 바꾸기
+
+처음에는 **내 PC의 현재 시각**에 맞춰 낮과 밤이 정해집니다. 바꾸는 방법은 세 가지입니다.
+
+| 방법 | 설명 |
+|---|---|
+| **View 메뉴 → Time 막대** | 막대를 끌면 원하는 시각(15분 단위)으로 바로 바뀝니다. 오른쪽 **Now** 버튼은 현재 시각으로 되돌립니다. |
+| **Y 키 누르고 있기** | 누르는 동안 시간이 빠르게 흐릅니다. **Shift+Y**는 거꾸로 흐릅니다. |
+| **N 키** | 현재 시각으로 되돌립니다. |
+
+- 정오(12:00) 전후는 한낮, 자정(0:00) 전후는 한밤입니다.
+- 밤이 너무 어두우면 **L** 키로 횃불 조명을 켜 보세요.
+
+---
+
+## 클래식 ⇄ 리테일 전환
+
+[포터블 방식](#설치-방법-windows-추천)으로 설치했다면, 화면 왼쪽 위 메뉴(View · Sound · Travel · Highlight) 오른쪽에 버튼이 하나 더 있습니다.
+
+- 클래식 화면: **Retail ⇄** 를 누르면 리테일로 바뀝니다.
+- 리테일 화면: **Classic ⇄** 를 누르면 클래식으로 돌아갑니다.
+
+알아 두면 좋은 점:
+
+- 전환하면 페이지를 새로 읽고 게임 데이터를 다시 불러오므로 **몇 초 로딩**이 있습니다. 위치는 시작 위치로 돌아갑니다.
+- 두 에디션은 **설정을 함께 씁니다.** (시간, 하이라이트 등)
+- 리테일 버튼은 `app\retail\` 폴더가 있을 때만 나타납니다.
+
+---
+
+## 리테일 에디션 안내와 한계
+
+리테일 에디션은 리테일(본섭) 클라이언트의 지형 데이터를 읽어서 보여 줍니다.
+
+**보이는 지역**
+
+- **동부 왕국**과 **칼림도어**: 대격변 이후의 리테일 지형
+- **줄다자르**(격전의 아제로스 대륙): 두 대륙 남쪽 바다 가운데에 놓입니다. **3** 키로 바로 이동할 수 있습니다.
+- 던전, 레이드, 다른 대륙(노스렌드, 판다리아, 쿨 티라스 등)은 **일부러 넣지 않았습니다.**
+
+**한계**
+
+- **NPC와 몬스터는 표시하지 않습니다.** 이 앱의 NPC 배치 데이터는 클래식(1.12) 기준이라 리테일 지형과 맞지 않기 때문입니다. View 메뉴에서도 NPC 항목이 빠져 있습니다.
+- 상자·약초·광석 같은 **오브젝트**, 지역 이름, 비행 경로, 배·비행선 데이터도 클래식 기준입니다. 그래서 리테일 지형과 위치가 어긋날 수 있습니다. 오브젝트는 View 메뉴의 *Objects* 체크박스로 끌 수 있습니다.
+- 줄다자르에는 클래식 지역 데이터가 없어서, 정보창에 지역 이름 대신 `Zandalar - tile 29_37` 처럼 타일 번호가 나옵니다.
+- 블리자드가 암호화해 둔 일부 리테일 파일은 읽을 수 없습니다.
+- 줄다자르 맵 파일에는 본섬과 떨어진 작은 지형 조각이 몇 개 들어 있어서, 섬 옆 바다에 함께 보입니다.
+
+---
+
+## 자주 묻는 질문 / 문제 해결
+
+**Q. "Windows의 PC 보호" 창이 떠요.**
+A. 실행 파일에 디지털 서명이 없어서 나오는 경고입니다. **추가 정보 → 실행**을 누르세요.
+
+**Q. 게임 폴더를 못 찾는다고 나와요.**
+A. **Choose your World of Warcraft folder**를 눌러, `_classic_era_`·`_retail_` 등이 들어 있는 **World of Warcraft 폴더 자체**를 고르세요. 그 안의 `_classic_era_` 폴더를 고르면 안 됩니다. 창에 "업로드"라고 나와도 파일은 내 PC 밖으로 나가지 않습니다.
+
+**Q. 시간이 지나도 낮과 밤이 안 바뀌어요.**
+A. 원작은 WoW Forever(클래식 베타) 클라이언트의 조명 데이터 구조에 맞춰져 있어서, 클래식 에라·리테일에서는 조명을 읽지 못했습니다. 이 포크에서 고쳤습니다. 여전히 그렇다면 창에서 **F5**로 새로고침해 보세요.
+
+**Q. 한낮 화면이 주황빛이에요.**
+A. 게임 데이터의 직사광 색이 지역에 따라 강한 주황(예: 엘윈 숲 정오 `#FF8800`)이라서 생기는 현상입니다. 이 포크는 직사광의 밝기는 그대로 두고 색조의 75%를 해의 색으로 바꿔 자연스럽게 보정합니다. 세기는 `src/viewer/lighting.ts`의 `DIRECT_NATURAL` 값으로 조절할 수 있습니다(0 = 게임 원래 색, 1 = 해의 색만).
+
+**Q. 다른 창을 보고 있으면 소리가 안 나요.**
+A. 이 포크는 Map Explorer 창이 **포커스를 잃거나 최소화되면 자동으로 음소거**합니다. 창으로 돌아오면 바로 다시 소리가 납니다. 앱의 **M** 키로 직접 끈 소리는 돌아와도 계속 꺼져 있습니다.
+
+**Q. 전체 화면으로 보고 싶어요.**
+A. 창에서 **F11**을 누르면 됩니다. 다시 누르면 원래대로 돌아옵니다.
+
+**Q. "No free port between 51730 and 51749" 오류가 나요.**
+A. 다른 프로그램이 그 포트들을 쓰고 있습니다. 해당 프로그램을 닫거나 PC를 다시 시작하세요.
+
+**Q. Retail ⇄ 버튼이 안 보여요.**
+A. `app\retail\` 폴더가 있는지 확인하세요. 개발 서버(`npm run dev`)로 실행하면 버튼은 나타나지 않습니다.
+
+---
+
+## 이 포크에서 바뀐 점 (개발자용)
+
+### 빌드 구조
+
+빌드 옵션 `VITE_EDITION` 하나로 클래식과 리테일을 나눕니다. 코드에서는 `src/edition.ts`의 `RETAIL` 상수로 구분합니다.
+
+| 명령 | 결과 |
+|---|---|
+| `npm run build` | 타입 검사 후 `dist/`(클래식)와 `dist/retail/`(리테일)를 함께 빌드 |
+| `npm run dev` | 클래식 개발 서버 |
+| `npm run dev:retail` | 리테일 개발 서버 (`.env.retail`의 `VITE_EDITION=retail` 사용) |
+| `npm run portable` | 원작과 같이 포터블 zip 생성 (mingw-w64, ImageMagick, 7-Zip 필요). `app` 안에 리테일도 포함됩니다. |
+
+### 변경 내용
+
+| 파일 | 내용 |
+|---|---|
+| `src/edition.ts`, `.env.retail` | 에디션 구분 상수와 리테일 빌드 설정 (새 파일) |
+| `src/explorer/lighting.ts` | **조명 수정.** LightData 표의 칸 수를 보고 칸 위치를 맞춥니다. WoW Forever는 52칸 이상이고, 클래식 에라(46칸)·리테일(47칸)은 모든 칸이 하나씩 앞당겨져 있습니다. 원작은 Forever 기준으로만 읽어서 다른 클라이언트에서는 시간대별 조명을 하나도 찾지 못했습니다. |
+| `src/viewer/lighting.ts` | **색감 보정.** 직사광의 밝기는 유지하고 색조의 `DIRECT_NATURAL`(0.75)만큼을 해의 색으로 바꿉니다. |
+| `src/explorer/maps.ts` | 리테일에서 줄다자르(맵 1642, WDT 1436413, WDL 1436416)를 대륙 목록에 추가 |
+| `src/explorer/world.ts` | 리테일에서 대륙 외의 맵(던전 등)을 불러오지 않음 |
+| `src/viewer/viewer.ts` | 세 번째 대륙을 두 대륙 남쪽 바다 가운데에 배치. 단축키 변경(T·Y·H 등) |
+| `src/viewer/objects.ts` | 리테일에서 NPC·영혼의 치유사를 항상 숨김 |
+| `src/viewer/main.ts` | 에디션별 게임 선택(리테일은 `wow`), 전환 버튼, 리테일의 NPC 설정 항목 제거, 게임 파일 경로를 루트 기준(`/__wow/`)으로 변경, 하이라이트 단축키 제거 |
+| `src/viewer/flyControls.ts`, `walkControls.ts` | 이동 키를 오른쪽으로 한 칸씩 이동 (Q→W, W→E, E→R, A→S, S→D, D→F) |
+| `index.html` | 도움말의 단축키 표시 수정, 백그라운드 음소거 스크립트, 전환 버튼과 스타일 |
+
+### 포터블 런처와 /retail/
+
+원작의 포터블 런처(`MapExplorer.exe`)는 `app` 폴더 아래 하위 폴더도 그대로 서빙합니다. 그래서 `app/retail/`에 리테일 빌드를 두면 같은 서버(`127.0.0.1:51730`)의 `/retail/` 주소로 열립니다.
+리테일 빌드도 게임 파일은 루트의 `/__wow/`에서 읽어야 하므로, `main.ts`에서 게임 파일 주소를 상대 경로(`__wow/`)에서 루트 기준(`/__wow/`)으로 바꿨습니다.
+
+### 원작의 도구들
+
+스폰 데이터 재생성(`npm run spawns`), 지역 데이터 재생성(`npm run regions`), 게임 데이터 점검(`npm run probe`) 등은 원작과 같습니다. 자세한 내용은 [README.en.md](README.en.md)의 *For developers*를 보세요.
+
+---
+
+## 저작권과 출처
+
+- **원작**: [Coldensjo/ClassicWowMapExplorer](https://github.com/Coldensjo/ClassicWowMapExplorer) by Coldensjo. 원작 저장소에는 라이선스가 명시되어 있지 않습니다. 원작 코드의 저작권은 원작자에게 있고, 이 저장소는 GitHub의 포크 기능으로 공개한 수정본입니다.
+- **NPC·오브젝트·지역 데이터**(`public/spawns`): [VMaNGOS](https://github.com/vmangos/core) 월드 데이터베이스에서 만든 데이터입니다.
+- **World of Warcraft**와 게임 데이터는 Blizzard Entertainment의 상표이자 저작물입니다. 이 앱은 게임 파일을 포함하지 않으며, 사용자의 PC에 설치된 게임 파일을 읽기만 합니다.
+- 이 포크의 변경 사항은 Claude Code의 도움을 받아 작성했습니다.
