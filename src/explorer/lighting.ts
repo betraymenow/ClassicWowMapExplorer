@@ -79,16 +79,18 @@ export async function loadLighting(storage: CascStorage, mapIds: number[]): Prom
 
 	const wanted = new Set(zones.map((z) => z.params));
 	const keys: Record<number, LightKey[]> = {};
+	// Forever's LightData has one more leading field than Classic Era's (46 fields) and retail's (47).
+	const o = data.fieldCount >= 50 ? 0 : -1;
 	for (const id of data.ids()) {
-		const param = data.getInt(id, 1)!;
+		const param = data.getInt(id, 1 + o)!;
 		if (!wanted.has(param)) continue;
 		(keys[param] ??= []).push({
 			// The high 16 bits hold something else; the time is the low half.
-			time: data.getInt(id, 2)! & 0xffff,
-			colors: LIGHT_COLORS.map((_, i) => data.getInt(id, 3 + i)!),
-			fogEnd: asFloat(data.getInt(id, 21)!),
-			fogScaler: asFloat(data.getInt(id, 22)!),
-			grading: data.getInt(id, 32) ?? 0,
+			time: data.getInt(id, 2 + o)! & 0xffff,
+			colors: LIGHT_COLORS.map((_, i) => data.getInt(id, 3 + o + i)!),
+			fogEnd: asFloat(data.getInt(id, 21 + o)!),
+			fogScaler: asFloat(data.getInt(id, 22 + o)!),
+			grading: data.getInt(id, 32 + o) ?? 0,
 			fogDensity: data.fieldCount > 51 ? asFloat(data.getInt(id, 51) ?? 0) || 1 : 1,
 		});
 	}

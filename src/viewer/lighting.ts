@@ -3,6 +3,9 @@ import { LIGHT_COLORS, type LightColor, type LightingData, type LightKey, type L
 
 export const DAY = 2880; // half-minutes
 
+/** How much of the direct light's hue is replaced by the sun's (0 = the game's colour as is). */
+const DIRECT_NATURAL = 0.75;
+
 export interface LightState {
 	colors: Record<LightColor, THREE.Color>;
 	fogEnd: number;
@@ -108,6 +111,11 @@ export class Lighting {
 			for (const p of parts) c.add(p.value.colors[i].clone().multiplyScalar(p.weight / sum));
 			colors[name] = c;
 		});
+		// The game's direct light is strongly orange in places (Elwynn's noon is #ff8800), which tints
+		// the whole ground here. Keep its brightness but take most of its hue from the sun's colour.
+		const lum = (c: THREE.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+		const sunLum = lum(colors.sun);
+		if (sunLum > 0) colors.direct.lerp(colors.sun.clone().multiplyScalar(lum(colors.direct) / sunLum), DIRECT_NATURAL);
 		let fogEnd = 0;
 		let fogWeight = 0;
 		let fogScaler = 0;
