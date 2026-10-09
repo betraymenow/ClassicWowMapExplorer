@@ -11,6 +11,7 @@ import type { MapExplorer } from './maps';
 import { loadWorldMaps, type WorldMapInfo } from './worldMap';
 import { loadPlaces, type Place } from './places';
 import { KNOWN_MAPS } from './maps';
+import { RETAIL } from '../edition';
 import { globalWmoPlacement, globalWmoTiles, loadM2, loadWmo, parsePlacements, type ModelData, type ObjectKind, type Placement } from './objects';
 import { GroundEffects, type ClutterSource } from './groundEffects';
 import { PortalSource } from './portals';
@@ -134,6 +135,8 @@ export class WorldLoader {
 	 * from ADTs have a WDL next to their WDT; WMO-only maps are one building.
 	 */
 	async loadInstance(mapId: number): Promise<InstanceMap | null> {
+		// Retail build: only the continents in KNOWN_MAPS, no dungeons or other maps.
+		if (RETAIL && !KNOWN_MAPS.some((m) => m.mapId === mapId)) return null;
 		const table = await loadTable(this.storage, DB2_FILES.Map);
 		const wdtFdid = table.getInt(mapId, MAP_WDT) ?? 0;
 		if (!wdtFdid || this.storage.status(wdtFdid) !== 'ok') return null;
@@ -167,6 +170,7 @@ export class WorldLoader {
 			const wdt = table.getInt(id, MAP_WDT) ?? 0;
 			if (!wdt || this.storage.status(wdt) !== 'ok') continue;
 			const known = KNOWN_MAPS.find((m) => m.mapId === id);
+			if (RETAIL && !known) continue;
 			out.push({
 				id,
 				name: known?.name ?? table.getString(id, MAP_NAME) ?? `Map ${id}`,

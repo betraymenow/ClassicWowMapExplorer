@@ -4,11 +4,14 @@ import { parseAdtRoot, tileHeightGrid } from '../formats/adt';
 import { blpInfo, decodeBlp, type Image } from '../formats/blp';
 import { downscale } from './image';
 import { parseWdt, TILE_FILE_KINDS, type TileFileKind, type Wdt, type WdtTile } from '../formats/wdt';
+import { RETAIL } from '../edition';
 
 /** Continents whose file IDs are known; Map.db2 will replace this list. */
 export const KNOWN_MAPS = [
 	{ name: 'Eastern Kingdoms', directory: 'Azeroth', mapId: 0, wdt: 775971, wdl: 775970 },
 	{ name: 'Kalimdor', directory: 'Kalimdor', mapId: 1, wdt: 782779, wdl: 782778 },
+	// Retail only; its WDL isn't right before its WDT.
+	...(RETAIL ? [{ name: 'Zandalar', directory: 'Zandalar', mapId: 1642, wdt: 1436413, wdl: 1436416 }] : []),
 ];
 
 export type FileAvailability = Record<TileFileKind, Partial<Record<FileStatus | 'none', number>>>;

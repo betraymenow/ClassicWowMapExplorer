@@ -10,6 +10,7 @@ import { perf } from './perf';
 import { PARTICLE_RANGE, SHOT_PARTICLE_RANGE, ParticleSystem, type EmitterSource, type LoadedEmitter } from './particles';
 import { useShadows, type ShadowRole } from './shadows';
 import { liquidMaterial, liquidTime } from './terrainMaterials';
+import { RETAIL } from '../edition';
 import { FOOTSTEP_RANGE } from './footsteps';
 import { TextureCache } from './textureCache';
 
@@ -616,10 +617,12 @@ export class ObjectManager {
 		for (const entry of this.models.values()) entry.dirty = true;
 	}
 
-	private readonly hiddenKinds = new Set<Hideable>();
+	// Retail: the creature spawns are classic ones, out of place on retail terrain, so never shown.
+	private readonly hiddenKinds = new Set<Hideable>(RETAIL ? ['creature', 'spiritHealer'] : []);
 
 	/** Shows or hides every creature (NPCs and monsters), game object (chests, herbs, doors...) or spirit healer. */
 	setKindShown(kind: Hideable, shown: boolean): void {
+		if (RETAIL && kind !== 'object') return;
 		if (shown !== this.hiddenKinds.has(kind)) return;
 		if (shown) this.hiddenKinds.delete(kind);
 		else this.hiddenKinds.add(kind);

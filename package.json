@@ -5,7 +5,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"build": "tsc --noEmit && vite build",
+		"dev:retail": "vite --mode retail",
+		"build": "tsc --noEmit && vite build && vite build --mode retail --outDir dist/retail",
 		"typecheck": "tsc --noEmit",
 		"probe": "tsx tools/probe.ts",
 		"spawns": "tsx tools/buildSpawns.ts",

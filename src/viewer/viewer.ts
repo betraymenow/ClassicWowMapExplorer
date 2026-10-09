@@ -527,7 +527,7 @@ export class Viewer {
 		window.addEventListener('resize', () => this.resize());
 		window.addEventListener('keydown', (e) => this.onKey(e));
 		window.addEventListener('keyup', (e) => {
-			if (e.code === 'KeyT') this.stopTime();
+			if (e.code === 'KeyY') this.stopTime();
 		});
 		window.addEventListener('blur', () => this.stopTime());
 		canvas.addEventListener('click', (e) => this.onClick(e));
@@ -1245,7 +1245,7 @@ export class Viewer {
 			else this.startShot();
 		} else if (e.code === 'Escape' && this.shot) this.endShot();
 		else if (e.code === 'KeyO') this.overview();
-		else if (e.code === 'KeyR') this.controls.flyTo(this.startPosition(), 0, -0.3, 2.5);
+		else if (e.code === 'KeyT') this.controls.flyTo(this.startPosition(), 0, -0.3, 2.5);
 		else if (e.code.startsWith('Digit')) this.goToContinent(Number(e.code.slice(5)) - 1);
 		else if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
 			const problem = this.setWalking(!this.walker.active);
@@ -1253,8 +1253,8 @@ export class Viewer {
 		}
 		// Letters rather than [ ] \, which need AltGr on many layouts. The sun moves while T is
 		// held; key repeats only pick up Shift being pressed or let go along the way.
-		else if (e.code === 'KeyT') this.timeRunning = e.shiftKey ? -1 : 1;
-		else if (e.code === 'KeyY') {
+		else if (e.code === 'KeyY') this.timeRunning = e.shiftKey ? -1 : 1;
+		else if (e.code === 'KeyNone') {
 			const step = 2 ** (e.shiftKey ? -FLY_SPEED_STEP : FLY_SPEED_STEP);
 			if (this.controls.smartSpeed) this.settings = { flySpeed: this.controls.speedScale * step };
 			else this.settings = { fixedSpeed: this.controls.fixedSpeed * step };
@@ -1270,7 +1270,7 @@ export class Viewer {
 			const toggles: Record<string, Partial<ViewSettings>> = {
 				KeyL: { torch: !s.torch },
 				KeyG: { collision: !s.collision },
-				KeyF: { side: s.side === 'alliance' ? 'horde' : 'alliance' },
+				KeyH: { side: s.side === 'alliance' ? 'horde' : 'alliance' },
 				KeyV: { clutter: !s.clutter },
 				KeyJ: { cinematic: !s.cinematic },
 				KeyB: { grading: !s.grading },
@@ -2164,6 +2164,16 @@ function layoutContinents(loaded: { map: (typeof KNOWN_MAPS)[number]; tiles: Far
 	let anchor: ReturnType<typeof extent> | null = null;
 	for (const { map, tiles } of loaded) {
 		const e = extent(tiles);
+		if (placements.length >= 2) {
+			// A third continent (Zandalar) goes in the sea south of the first two, between them.
+			const placed = loaded.slice(0, placements.length).flatMap(({ tiles: t }, i) => t.map((f) => ({ x: f.x + placements[i].offsetX, y: f.y + placements[i].offsetY })));
+			const [minX, maxX, maxY] = [Math.min(...placed.map((f) => f.x)), Math.max(...placed.map((f) => f.x)), Math.max(...placed.map((f) => f.y))];
+			const xs = tiles.map((t) => t.x);
+			const offsetX = Math.round((minX + maxX) / 2 - (Math.min(...xs) + Math.max(...xs)) / 2);
+			const offsetY = maxY + 1 + CONTINENT_GAP - Math.min(...tiles.map((t) => t.y));
+			placements.push({ name: map.name, mapId: map.mapId, wdt: map.wdt, offsetX, offsetY });
+			continue;
+		}
 		if (!anchor) {
 			placements.push({ name: map.name, mapId: map.mapId, wdt: map.wdt, offsetX: 0, offsetY: 0 });
 			anchor = e;

@@ -80,7 +80,7 @@ export class FlyControls {
 		window.addEventListener('keydown', (e) => {
 			if (isTyping(e) || !this.enabled) return;
 			this.keys.add(e.code);
-			if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyC'].includes(e.code)) {
+			if (['KeyE', 'KeyS', 'KeyD', 'KeyF', 'Space', 'KeyC'].includes(e.code)) {
 				this.flight = null;
 				// Moving yourself gets you off a ride, as does Escape.
 				this.endRide(false);
@@ -273,12 +273,12 @@ export class FlyControls {
 			const forward = this.forward();
 			const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
 			const move = new THREE.Vector3();
-			if (k.has('KeyW') || k.has('ArrowUp')) move.add(forward);
-			if (k.has('KeyS') || k.has('ArrowDown')) move.sub(forward);
-			if (k.has('KeyD') || k.has('ArrowRight')) move.add(right);
-			if (k.has('KeyA') || k.has('ArrowLeft')) move.sub(right);
-			if (k.has('Space') || k.has('KeyE')) move.y += 1;
-			if (k.has('KeyC') || k.has('KeyQ')) move.y -= 1;
+			if (k.has('KeyE') || k.has('ArrowUp')) move.add(forward);
+			if (k.has('KeyD') || k.has('ArrowDown')) move.sub(forward);
+			if (k.has('KeyF') || k.has('ArrowRight')) move.add(right);
+			if (k.has('KeyS') || k.has('ArrowLeft')) move.sub(right);
+			if (k.has('Space') || k.has('KeyR')) move.y += 1;
+			if (k.has('KeyC') || k.has('KeyW')) move.y -= 1;
 			const delta = new THREE.Vector3();
 			if (move.lengthSq() > 0) delta.addScaledVector(move.normalize(), this.speed * dt);
 

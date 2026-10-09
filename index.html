@@ -7,8 +7,34 @@
 	<link rel="icon" href="/icon.svg" type="image/svg+xml">
 	<link rel="stylesheet" href="/src/viewer/viewer.css">
 	<!-- Wowhead's official tooltip embed: hovering a Wowhead link in the info panel shows its tooltip. -->
+	<script>
+	// Mute every sound while the window is in the background (unfocused or minimised).
+	(() => {
+		const els = new Set(), ctxs = new Set();
+		const bg = () => document.hidden || !document.hasFocus();
+		const apply = () => {
+			const m = bg();
+			for (const a of els) a.muted = m;
+			for (const c of ctxs) (m ? c.suspend() : c.resume()).catch(() => {});
+		};
+		const NA = window.Audio;
+		window.Audio = function (...a) { const e = new NA(...a); e.muted = bg(); e.addEventListener('play', () => { els.add(e); e.muted = bg(); }); e.addEventListener('pause', () => els.delete(e)); return e; };
+		window.Audio.prototype = NA.prototype;
+		const NC = window.AudioContext;
+		if (NC) window.AudioContext = class extends NC { constructor(...a) { super(...a); ctxs.add(this); if (bg()) this.suspend().catch(() => {}); } };
+		addEventListener('blur', apply); addEventListener('focus', apply);
+		document.addEventListener('visibilitychange', apply);
+	})();
+	</script>
 	<script>const whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };</script>
 	<script src="https://wow.zamimg.com/js/tooltips.js" async></script>
+	<style>
+	/* Classic / retail switch, drawn like the menu's tabs. */
+	#menu #edition { display: inline-block; text-decoration: none; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; background: var(--panel); border: 1px solid transparent; border-radius: 6px; padding: 5px 12px; color: inherit; }
+	#menu #edition:hover { color: var(--accent); }
+	.wow-ui #menu #edition { border-style: solid; border-width: 0 10px; border-radius: 0; border-image: var(--wow-button-up) 0 12 fill / 0 10px stretch; background: none; color: var(--accent); font-weight: 400; text-shadow: 1px 1px 0 #000; padding: 4px 6px; }
+	.wow-ui #menu #edition:hover { color: #fff; filter: brightness(1.25); }
+	</style>
 </head>
 <body>
 	<canvas id="view"></canvas>
@@ -85,7 +111,7 @@
 					<label><input type="checkbox" data-setting="spiritHealers"> Spirit healers</label>
 					<label><input type="checkbox" data-setting="gameObjects"> Objects (chests, herbs, ore, doors…)</label>
 					<label><input type="checkbox" data-setting="mapNames"> Dungeon and raid names <kbd>I</kbd></label>
-					<label>Name colours for <select data-setting="side"><option value="alliance">Alliance</option><option value="horde">Horde</option></select> <kbd>F</kbd></label>
+					<label>Name colours for <select data-setting="side"><option value="alliance">Alliance</option><option value="horde">Horde</option></select> <kbd>H</kbd></label>
 					<label>Weather <select data-setting="weather"><option value="auto">The zone's own</option><option value="dry">The zone's own, no rain or snow</option><option value="off">Always clear</option><option value="rain">Rain</option><option value="snow">Snow</option><option value="sandstorm">Sandstorm</option></select></label>
 					<label><input type="checkbox" id="stats-on"> Performance stats <kbd>K</kbd></label>
 				</div>
@@ -147,7 +173,7 @@
 			<details id="highlight" name="menu">
 				<summary>Highlight</summary>
 				<div class="menu-body panel">
-					<label class="highlight-on"><input type="checkbox" id="highlight-on"> Highlight <kbd>H</kbd></label>
+					<label class="highlight-on"><input type="checkbox" id="highlight-on"> Highlight</label>
 					<div id="highlight-groups">
 						<label data-group="chest"><input type="checkbox" value="chest"> Chests</label>
 						<label data-group="herb"><input type="checkbox" value="herb"> Herbs</label>
@@ -172,6 +198,7 @@
 					<div id="highlight-status" class="muted small" aria-live="polite"></div>
 				</div>
 			</details>
+			<a id="edition" href="/" style="display: none"></a>
 		</nav>
 		<div id="hud">
 			<div id="hud-location"></div>
@@ -250,18 +277,17 @@
 				<section>
 					<h3>Flying</h3>
 					<div><kbd>Click</kbd> look around · <kbd>Esc</kbd> let go of the mouse</div>
-					<div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fly</div>
+					<div><kbd>E</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd> fly · <kbd>R</kbd> / <kbd>W</kbd> up / down</div>
 					<div><kbd>Space</kbd> / <kbd>C</kbd> up / down</div>
 					<div><kbd>Shift</kbd> fast · <kbd>Wheel</kbd> zoom</div>
-					<div><kbd>Y</kbd> / <kbd>Shift</kbd><kbd>Y</kbd> faster / slower all the time</div>
 					<div><kbd>G</kbd> fly through walls · <kbd>J</kbd> cinematic camera</div>
 				</section>
 				<section>
 					<h3>Walking</h3>
 					<div><kbd data-key="Backquote">`</kbd> drop to the ground from the camera and walk, or fly again</div>
-					<div><kbd>W</kbd> / <kbd>S</kbd> run / backpedal · <kbd>A</kbd> / <kbd>D</kbd> turn</div>
-					<div><kbd>Q</kbd> / <kbd>E</kbd> strafe · <kbd>Space</kbd> jump</div>
-					<div>Drag with the left button to turn the camera; hold the right button to turn yourself too (then <kbd>A</kbd> / <kbd>D</kbd> strafe); both buttons run</div>
+					<div><kbd>E</kbd> / <kbd>D</kbd> run / backpedal · <kbd>S</kbd> / <kbd>F</kbd> turn</div>
+					<div><kbd>W</kbd> / <kbd>R</kbd> strafe · <kbd>Space</kbd> jump</div>
+					<div>Drag with the left button to turn the camera; hold the right button to turn yourself too (then <kbd>S</kbd> / <kbd>F</kbd> strafe); both buttons run</div>
 					<div><kbd>Wheel</kbd> zoom · <kbd data-key="Backslash">\</kbd> or numpad <kbd>/</kbd> walk / run</div>
 					<div>In water: <kbd>Space</kbd> / <kbd>X</kbd> up / down; <kbd>Space</kbd> at the surface jumps out</div>
 				</section>
@@ -270,18 +296,17 @@
 
 					<div><kbd>/</kbd> go to a zone, town, dungeon or raid</div>
 					<div>Click the minimap to fly there</div>
-					<div><kbd>O</kbd> whole world · <kbd>1</kbd> / <kbd>2</kbd> continents</div>
-					<div><kbd>R</kbd> back to the start</div>
+					<div><kbd>O</kbd> whole world · <kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd> continents</div>
+					<div><kbd>T</kbd> back to the start</div>
 					<div>Click the coordinates to copy a link to the view</div>
 				</section>
 				<section>
 					<h3>The world</h3>
-					<div><kbd>T</kbd> / <kbd>Shift</kbd>+<kbd>T</kbd> later / earlier · <kbd>N</kbd> local time</div>
+					<div><kbd>Y</kbd> / <kbd>Shift</kbd>+<kbd>Y</kbd> later / earlier · <kbd>N</kbd> local time</div>
 					<div><kbd>L</kbd> torch · <kbd>V</kbd> grass and flowers</div>
 					<div><kbd>B</kbd> colour grading · <kbd>X</kbd> shadows (when flying) · <kbd>Z</kbd> fog</div>
-					<div><kbd>F</kbd> name colours for Alliance or Horde</div>
+					<div><kbd>H</kbd> name colours for Alliance or Horde</div>
 					<div><kbd>I</kbd> dungeon and raid names · <kbd>M</kbd> music and sound</div>
-					<div><kbd>H</kbd> highlight chests, herbs, ore, fishing pools or anything by name</div>
 					<div><kbd>Tab</kbd> world map, filled in where you've explored · <kbd>Esc</kbd> off a flight</div>
 				</section>
 				<section>

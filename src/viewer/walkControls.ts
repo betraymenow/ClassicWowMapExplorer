@@ -397,16 +397,16 @@ export class WalkControls {
 		let forward = 0;
 		let right = 0;
 		let turn = 0;
-		if (k.has('KeyW') || k.has('ArrowUp') || both) forward += 1;
-		if (k.has('KeyS') || k.has('ArrowDown')) forward -= 1;
-		if (k.has('KeyE')) right += 1;
-		if (k.has('KeyQ')) right -= 1;
-		const left = k.has('KeyA') || k.has('ArrowLeft');
-		const rightKey = k.has('KeyD') || k.has('ArrowRight');
+		if (k.has('KeyE') || k.has('ArrowUp') || both) forward += 1;
+		if (k.has('KeyD') || k.has('ArrowDown')) forward -= 1;
+		if (k.has('KeyR')) right += 1;
+		if (k.has('KeyW')) right -= 1;
+		const left = k.has('KeyS') || k.has('ArrowLeft');
+		const rightKey = k.has('KeyF') || k.has('ArrowRight');
 		// A/D turn, or strafe while the right button is held (the arrows always turn).
 		if (this.steering) {
-			if (k.has('KeyA')) right -= 1;
-			if (k.has('KeyD')) right += 1;
+			if (k.has('KeyS')) right -= 1;
+			if (k.has('KeyF')) right += 1;
 			if (k.has('ArrowLeft')) turn += 1;
 			if (k.has('ArrowRight')) turn -= 1;
 		} else {

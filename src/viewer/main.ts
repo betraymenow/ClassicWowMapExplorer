@@ -17,9 +17,41 @@ import { CHARACTER_OUTFITS, type CharacterOutfit, type CharacterRace } from '../
 
 import { setVolume, volumeSetting, type VolumeChannel } from './volume';
 import { WorldMap } from './worldMap';
+import { RETAIL } from '../edition';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = $('status');
+
+setUpEdition();
+
+/**
+ * The page title, the retail-only View panel, and the Classic / Retail switch in the menu. The
+ * portable launcher serves the classic build at / and the retail one at /retail/; the switch
+ * shows only when the other one is there.
+ */
+function setUpEdition(): void {
+	const link = $<HTMLAnchorElement>('edition');
+	link.style.display = 'none';
+	if (RETAIL) {
+		document.title = 'Map Explorer (Retail)';
+		// No NPCs on retail terrain (the spawns are classic ones), so nothing to switch on.
+		for (const name of ['creatures', 'spiritHealers']) document.querySelector(`[data-setting="${name}"]`)?.closest('label')?.remove();
+		link.textContent = 'Classic ⇄';
+		link.title = 'Switch to WoW Classic';
+		link.href = '/';
+		if (location.pathname.startsWith('/retail/')) link.style.display = '';
+	} else {
+		link.textContent = 'Retail ⇄';
+		link.title = 'Switch to retail (the live game)';
+		link.href = '/retail/';
+		// A server without it may answer with this same page (the dev server does): only show
+		// the switch when it's another build, one that loads a different script.
+		const own = document.querySelector('script[type="module"][src]')?.getAttribute('src');
+		fetch('/retail/index.html').then((r) => (r.ok ? r.text() : '')).then((page) => {
+			if (own && page.includes('<script') && !page.includes(own)) link.style.display = '';
+		}, () => {});
+	}
+}
 
 const storage = createStorageClient((message) => showProgress(message));
 
@@ -83,8 +115,10 @@ async function useSource(init: SourceInit): Promise<void> {
 		const products = (await storage.setSource(init)).filter((p) => p.product.startsWith('wow'));
 		const select = $<HTMLSelectElement>('product');
 		select.replaceChildren(...products.map((p) => new Option(`${p.product} ${p.version}`, p.product)));
-		// Prefer a classic build: the continent file IDs are the classic ones.
-		const preferred = products.find((p) => p.product === 'wow_classic_beta') ?? products.find((p) => p.product.startsWith('wow_classic'));
+		// Classic prefers a classic build (the continent file IDs are the classic ones); retail the live game.
+		const preferred = RETAIL
+			? products.find((p) => p.product === 'wow')
+			: products.find((p) => p.product === 'wow_classic_beta') ?? products.find((p) => p.product.startsWith('wow_classic'));
 		if (preferred) {
 			// Nothing to choose: straight in.
 			select.value = preferred.product;
@@ -107,7 +141,8 @@ async function useSource(init: SourceInit): Promise<void> {
  * has no such path, and then the folder is chosen by hand.
  */
 async function findWow(): Promise<void> {
-	const base = new URL('__wow/', location.href).href;
+	// From the root: the retail build is served under /retail/ next to the classic one.
+	const base = new URL('/__wow/', location.href).href;
 	let found = false;
 	try {
 		const response = await fetch(`${base}.build.info`, { method: 'HEAD' });
@@ -977,7 +1012,7 @@ function setUpHighlights(viewer: Viewer): void {
 		if (e.code === 'Enter') query.blur();
 	});
 	window.addEventListener('keydown', (e) => {
-		if (e.code !== 'KeyH' || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+		if (e.code !== 'KeyNone' || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
 		on.checked = !on.checked;
 		apply();
 		notify(`Highlights ${onOff(on.checked)}`);
