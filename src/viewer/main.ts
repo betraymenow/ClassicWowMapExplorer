@@ -25,6 +25,16 @@ const status = $('status');
 setUpEdition();
 
 /**
+ * A click on the world goes full screen; Escape (the browser's own) leaves it.
+ */
+function setUpFullscreen(view: HTMLElement): void {
+	view.addEventListener('pointerdown', () => {
+		if (document.fullscreenElement || document.pointerLockElement) return;
+		document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+	});
+}
+
+/**
  * The page title, the retail-only View panel, and the Classic / Retail switch in the menu. The
  * portable launcher serves the classic build at / and the retail one at /retail/; the switch
  * shows only when the other one is there.
@@ -225,6 +235,7 @@ async function explore(): Promise<void> {
 		const ui = loadUiAssets(storage);
 		const viewer = new Viewer($('view'), storage, showHud, showInfo, $('nameplates'));
 		infoViewer = viewer;
+		setUpFullscreen($('view'));
 		// For poking at the scene from the console (and test scripts) while developing.
 		if (import.meta.env.DEV) (globalThis as unknown as { mapExplorerViewer: Viewer }).mapExplorerViewer = viewer;
 		viewer.onShotStatus = showShotStatus;

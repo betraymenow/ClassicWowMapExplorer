@@ -794,7 +794,7 @@ kbd {
 }
 
 /* Alt+Z or U: only the world. */
-.ui-hidden :is(#top-left, #help, #help-hint, #side, #zone-banner, #crosshair, #nameplates) {
+.ui-hidden :is(#top-left, #help, #help-hint, #side, #zone-banner, #crosshair, #nameplates, #notice, #info, #worldmap) {
 	display: none !important;
 }
 
@@ -1695,4 +1695,19 @@ body.wow-ui {
 .walk-look-buttons button {
 	padding: 1px 8px;
 	font-size: 12px;
+}
+
+/* The pointer: a gauntlet, its fingertip the hot spot. Hidden while the mouse drags the view
+   around or both buttons fly forward (html.cursor-hidden, set by the fly controls). */
+*, *::before, *::after {
+	cursor: url('./cursor.png') 2 5, auto !important;
+}
+
+html.cursor-hidden, html.cursor-hidden * {
+	cursor: none !important;
+}
+
+/* The mouse locked only to hold the pointer in place while dragging: no crosshair then. */
+html.drag-lock #crosshair {
+	display: none !important;
 }

@@ -3,6 +3,15 @@ import { isTyping } from './typing';
 
 const LOOK_SENSITIVITY = 0.0022;
 const MAX_PITCH = THREE.MathUtils.degToRad(89.5);
+/** Mouse movement (px) under which a press of the left button is still a click rather than a drag. */
+const DRAG_SLOP = 4;
+/** Speed multiplier for Shift, and for flying forward with both mouse buttons. */
+const BOOST = 5;
+
+/** Hides the pointer (it keeps working) while dragging to look around or flying forward fast with both buttons. */
+function hidePointer(hidden: boolean): void {
+	document.documentElement.classList.toggle('cursor-hidden', hidden);
+}
 const MIN_CLEARANCE = 2;
 /** How quickly the cinematic camera catches up with the mouse: about 1/e of the way left after 1/rate seconds. */
 const CINEMATIC_TURN_RATE = 3;
@@ -32,7 +41,7 @@ interface Flight {
 }
 
 /**
- * Free-flying camera: lock() captures the mouse for looking around, WASD to move, Space/C for up/down,
+ * Free-flying camera: drag with the left button to look around, EDWR to move, Space/C for up/down,
  * Shift to boost, mouse wheel to zoom along the view direction. With smart speed, speed scales
  * with height above the ground, so the same controls work from treetop level to the whole
  * continent; without it, the camera always flies at fixedSpeed.
@@ -45,6 +54,10 @@ export class FlyControls {
 	private lookYaw = 0;
 	private lookPitch = 0;
 	private readonly keys = new Set<string>();
+	/** Mouse buttons held (MouseEvent.buttons): left and right together fly forward fast. */
+	private buttons = 0;
+	/** Both buttons were held since the last click, so that click isn't one (see takeChord). */
+	private chorded = false;
 	private zoomVelocity = 0;
 	private flight: Flight | null = null;
 	private riding: { ride: Ride; onEnd: (completed: boolean) => void; looked: number } | null = null;
@@ -61,11 +74,27 @@ export class FlyControls {
 		private readonly element: HTMLElement,
 	) {
 
+		// Looking around: drag with the left button held (pressed over the view, then anywhere), or
+		// just move the mouse while it's locked (Caps Lock).
 		document.addEventListener('mousemove', (e) => {
-			if (!this.enabled || document.pointerLockElement !== element) return;
+			if (!(e.buttons & 1)) this.dragging = false;
+			if (!this.enabled || !(this.dragging || this.locked)) return;
 			// Browsers now and then report a bogus jump (the hidden cursor being recentred), which
 			// would snap the view; no real flick covers a third of the window in one event.
 			if (Math.abs(e.movementX) > window.innerWidth / 3 || Math.abs(e.movementY) > window.innerHeight / 3) return;
+			if (this.dragging) {
+				this.dragDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
+				if (this.dragDistance > DRAG_SLOP) {
+					hidePointer(true);
+					// Lock the mouse for the drag, so the pointer stays where the press was and is
+					// back there when the button comes up (the browser restores it on unlock).
+					if (!this.locked && !this.dragLock) {
+						this.dragLock = true;
+						document.documentElement.classList.add('drag-lock');
+						this.lock();
+					}
+				}
+			}
 			this.flight = null;
 			if (this.riding) this.riding.looked = 0;
 			this.lookYaw -= e.movementX * LOOK_SENSITIVITY;
@@ -77,10 +106,51 @@ export class FlyControls {
 			this.flight = null;
 			this.zoomVelocity += -Math.sign(e.deltaY) * 2.5;
 		}, { passive: false });
+		element.addEventListener('mousedown', (e) => {
+			// A fresh press starts over: a chord's or drag's leftover mark mustn't swallow the next click.
+			if (!(this.buttons & 3)) {
+				this.chorded = false;
+				this.dragDistance = 0;
+			}
+			this.buttons = e.buttons;
+			if (e.button === 0) this.dragging = true;
+			if ((e.buttons & 3) === 3 && this.enabled) {
+				this.chorded = true;
+				hidePointer(true);
+				// Flying forward gets you off a ride, as the movement keys do.
+				this.flight = null;
+				this.endRide(false);
+			}
+		});
+		document.addEventListener('mouseup', (e) => {
+			this.buttons = e.buttons;
+			if (!(e.buttons & 1)) {
+				this.dragging = false;
+				// Only the drag's own lock: one made with Caps Lock stays.
+				if (this.dragLock) {
+					this.dragLock = false;
+					document.documentElement.classList.remove('drag-lock');
+					if (this.locked) document.exitPointerLock();
+				}
+			}
+			if (!(e.buttons & 3)) hidePointer(false);
+		});
+		document.addEventListener('pointerlockchange', () => {
+			if (this.locked) return;
+			this.dragLock = false;
+			document.documentElement.classList.remove('drag-lock');
+		});
+		// The right button is half of flying forward with both buttons, not a context menu.
+		element.addEventListener('contextmenu', (e) => e.preventDefault());
 		window.addEventListener('keydown', (e) => {
 			if (isTyping(e) || !this.enabled) return;
+			if ((e.code === 'CapsLock' || e.key === 'CapsLock') && !e.repeat) {
+				if (this.locked) document.exitPointerLock();
+				else this.lock();
+				return;
+			}
 			this.keys.add(e.code);
-			if (['KeyE', 'KeyS', 'KeyD', 'KeyF', 'Space', 'KeyC'].includes(e.code)) {
+			if (['KeyE', 'KeyW', 'KeyD', 'KeyR', 'Space', 'KeyC', 'KeyX'].includes(e.code)) {
 				this.flight = null;
 				// Moving yourself gets you off a ride, as does Escape.
 				this.endRide(false);
@@ -89,7 +159,45 @@ export class FlyControls {
 			if (e.code === 'Space') e.preventDefault();
 		});
 		window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-		window.addEventListener('blur', () => this.keys.clear());
+		window.addEventListener('blur', () => {
+			this.keys.clear();
+			this.buttons = 0;
+			this.dragging = false;
+			hidePointer(false);
+		});
+	}
+
+	/** The left button went down over the view and is still held: moving the mouse looks around. */
+	private dragging = false;
+	/** How far the mouse has moved (px) since the press began, to tell a drag from a click. */
+	private dragDistance = 0;
+	/** The mouse is locked for the current drag only (released when the left button comes up). */
+	private dragLock = false;
+
+	/**
+	 * Whether the click just ended a drag (looking around) or a press of both buttons (flying
+	 * forward) rather than being a click. Clears once no button is held.
+	 */
+	takeNonClick(): boolean {
+		const not = this.chorded || this.dragDistance > DRAG_SLOP;
+		if (!(this.buttons & 3)) {
+			this.chorded = false;
+			this.dragDistance = 0;
+		}
+		return not;
+	}
+
+	/** Locks the mouse to the view (Caps Lock): it's hidden and moving it looks around. */
+	lock(): void {
+		if (this.locked) return;
+		// Raw mouse movement skips the OS pointer acceleration, which is also where the spurious
+		// jumps come from; fall back to the plain lock where it isn't supported.
+		const request = (this.element.requestPointerLock as (options?: { unadjustedMovement?: boolean }) => Promise<void> | void).call(this.element, { unadjustedMovement: true });
+		if (request instanceof Promise) request.catch(() => this.element.requestPointerLock());
+	}
+
+	get locked(): boolean {
+		return document.pointerLockElement === this.element;
 	}
 
 	/** Adjusts a move so it doesn't pass through solid things; set by the viewer. */
@@ -140,17 +248,6 @@ export class FlyControls {
 		this.speed = speed;
 	}
 
-	lock(): void {
-		if (this.locked) return;
-		// Raw mouse movement skips the OS pointer acceleration, which is also where the spurious
-		// jumps come from; fall back to the plain lock where it isn't supported.
-		const request = (this.element.requestPointerLock as (options?: { unadjustedMovement?: boolean }) => Promise<void> | void).call(this.element, { unadjustedMovement: true });
-		if (request instanceof Promise) request.catch(() => this.element.requestPointerLock());
-	}
-
-	get locked(): boolean {
-		return document.pointerLockElement === this.element;
-	}
 
 	forward(out = new THREE.Vector3()): THREE.Vector3 {
 		return out.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
@@ -267,20 +364,26 @@ export class FlyControls {
 			}
 
 			const k = this.keys;
-			const boost = k.has('ShiftLeft') || k.has('ShiftRight') ? 5 : 1;
-			this.speed = (this.smartSpeed ? THREE.MathUtils.clamp(this.altitude * 0.8, 25, 25000) * this.speedScale : this.fixedSpeed) * boost;
+			const base = this.smartSpeed ? THREE.MathUtils.clamp(this.altitude * 0.8, 25, 25000) * this.speedScale : this.fixedSpeed;
+			this.speed = base * (k.has('ShiftLeft') || k.has('ShiftRight') ? BOOST : 1);
+			// Both mouse buttons: forward at the boosted speed, on top of the keys at their own speed.
+			const rushing = (this.buttons & 3) === 3;
 
 			const forward = this.forward();
 			const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
 			const move = new THREE.Vector3();
-			if (k.has('KeyE') || k.has('ArrowUp')) move.add(forward);
+			if ((k.has('KeyE') || k.has('ArrowUp')) && !rushing) move.add(forward);
 			if (k.has('KeyD') || k.has('ArrowDown')) move.sub(forward);
-			if (k.has('KeyF') || k.has('ArrowRight')) move.add(right);
-			if (k.has('KeyS') || k.has('ArrowLeft')) move.sub(right);
-			if (k.has('Space') || k.has('KeyR')) move.y += 1;
-			if (k.has('KeyC') || k.has('KeyW')) move.y -= 1;
+			if (k.has('KeyR') || k.has('ArrowRight')) move.add(right);
+			if (k.has('KeyW') || k.has('ArrowLeft')) move.sub(right);
+			if (k.has('Space')) move.y += 1;
+			if (k.has('KeyC') || k.has('KeyX')) move.y -= 1;
 			const delta = new THREE.Vector3();
 			if (move.lengthSq() > 0) delta.addScaledVector(move.normalize(), this.speed * dt);
+			if (rushing) {
+				delta.addScaledVector(forward, base * BOOST * dt);
+				this.speed = Math.max(this.speed, base * BOOST);
+			}
 
 			// Wheel zoom: move along the view by a fraction of the current height (or of the fixed
 			// speed), decaying smoothly.

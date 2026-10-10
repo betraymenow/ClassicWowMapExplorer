@@ -34,7 +34,7 @@ const SWIM_FLOAT = 0.75;
  * wading along that depth over a bumpy bottom doesn't flicker between the two.
  */
 const SWIM_BAND = 0.12;
-/** Rising and sinking in water (Space, X), yd/s. */
+/** Rising and sinking in water (Space, C), yd/s. */
 const SWIM_RISE = 4;
 /** Out of the water, a shore up to this far above the surface can be climbed onto. */
 const SHORE_CLIMB = 0.6;
@@ -399,14 +399,13 @@ export class WalkControls {
 		let turn = 0;
 		if (k.has('KeyE') || k.has('ArrowUp') || both) forward += 1;
 		if (k.has('KeyD') || k.has('ArrowDown')) forward -= 1;
-		if (k.has('KeyR')) right += 1;
-		if (k.has('KeyW')) right -= 1;
-		const left = k.has('KeyS') || k.has('ArrowLeft');
-		const rightKey = k.has('KeyF') || k.has('ArrowRight');
-		// A/D turn, or strafe while the right button is held (the arrows always turn).
+		if (k.has('KeyX')) right -= 1;
+		const left = k.has('KeyW') || k.has('ArrowLeft');
+		const rightKey = k.has('KeyR') || k.has('ArrowRight');
+		// W/R turn, or strafe while the right button is held (the arrows always turn).
 		if (this.steering) {
-			if (k.has('KeyS')) right -= 1;
-			if (k.has('KeyF')) right += 1;
+			if (k.has('KeyW')) right -= 1;
+			if (k.has('KeyR')) right += 1;
 			if (k.has('ArrowLeft')) turn += 1;
 			if (k.has('ArrowRight')) turn -= 1;
 		} else {
@@ -671,7 +670,7 @@ export class WalkControls {
 		}
 		let rise = 0;
 		if (this.keys.has('Space')) rise += SWIM_RISE;
-		if (this.keys.has('KeyX')) rise -= SWIM_RISE;
+		if (this.keys.has('KeyC')) rise -= SWIM_RISE;
 		// Steering, forward follows the camera up and down, as in the game, once under the surface.
 		if (this.steering && this.intent.x > 0) {
 			const dive = Math.sin(this.pitch) * want.length();

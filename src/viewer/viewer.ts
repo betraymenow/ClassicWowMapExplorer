@@ -538,7 +538,7 @@ export class Viewer {
 	private readonly raycaster = new THREE.Raycaster();
 	private lastHover = 0;
 
-	/** Spawn under the mouse, or under the centre crosshair while the mouse is captured. */
+	/** Spawn under the mouse, or under the centre crosshair while the mouse is locked (Caps Lock). */
 	private pickAt(e: MouseEvent): SpawnInfo | null {
 		if (!this.objects) return null;
 		const ndc = this.controls.locked
@@ -549,26 +549,26 @@ export class Viewer {
 		return this.objects.pick(this.raycaster)?.info ?? null;
 	}
 
-	/** Clicking a creature or object opens its info (releasing the mouse); elsewhere captures the mouse. */
+	/**
+	 * Clicking a creature or object opens its info; elsewhere a click does nothing (the mouse is
+	 * never captured: dragging looks around).
+	 */
 	private onClick(e: MouseEvent): void {
-		// Walking, a click selects what's under the mouse and never captures it (holding the right
-		// button does); a drag that turned the camera isn't a click.
+		// Walking, a drag that turned the camera isn't a click.
 		if (this.walker.active) {
-			const hit = this.walker.wasDrag || this.controls.locked ? null : this.pickAt(e);
+			const hit = this.walker.wasDrag ? null : this.pickAt(e);
 			if (hit) this.onSelect(hit);
 			return;
 		}
+		// Only the left button clicks; the end of a drag (looking around) or of both buttons
+		// (flying forward) isn't a click.
+		if (e.button !== 0 || this.controls.takeNonClick()) return;
 		const hit = this.pickAt(e);
-		if (hit) {
-			if (this.controls.locked) document.exitPointerLock();
-			this.onSelect(hit);
-		} else {
-			this.controls.lock();
-		}
+		if (hit) this.onSelect(hit);
 	}
 
 	private onHover(e: MouseEvent): void {
-		if (this.controls.locked || performance.now() - this.lastHover < 80) return;
+		if (e.buttons || performance.now() - this.lastHover < 80) return;
 		this.lastHover = performance.now();
 		this.canvas.style.cursor = this.pickAt(e) ? 'pointer' : '';
 	}
@@ -1274,8 +1274,6 @@ export class Viewer {
 				KeyV: { clutter: !s.clutter },
 				KeyJ: { cinematic: !s.cinematic },
 				KeyB: { grading: !s.grading },
-				// Walking, X sinks in water instead.
-				...(this.walker.active ? {} : { KeyX: { shadows: !s.shadows } }),
 				KeyZ: { fog: !s.fog },
 			};
 			if (this.mapLabels) toggles.KeyI = { mapNames: !s.mapNames };
@@ -1698,7 +1696,6 @@ export class Viewer {
 	 * tuft of grass and particle effect on them however far off, and once they have the picture is saved (see updateShot).
 	 */
 	private startShot(): void {
-		if (this.controls.locked) document.exitPointerLock();
 		const tiles = this.terrain.holdInView(this.camera, SHOT_TILES);
 		this.objects.unlimited = true;
 		this.clutter.holdInView(this.camera);
