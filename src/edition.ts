@@ -3,4 +3,5 @@
  * Classic (the default) explores WoW Classic; retail explores the live game ("wow"), with only
  * Eastern Kingdoms, Kalimdor and Zandalar, and without the classic NPC spawns.
  */
-export const RETAIL = import.meta.env.VITE_EDITION === 'retail';
+// import.meta.env only exists under Vite; the Node tools (npm run probe...) run without it.
+export const RETAIL = import.meta.env?.VITE_EDITION === 'retail';

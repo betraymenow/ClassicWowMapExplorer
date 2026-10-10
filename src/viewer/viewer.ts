@@ -80,12 +80,10 @@ const HOLE_DEPTH = 40;
 /** Yards of slack around area triggers: the camera is a little ball, not a point. */
 const TRIGGER_MARGIN = 1;
 /**
- * Under water: how far you can see (yards), and the colour for when the zone's light gives none.
- * Water and sea take their colour from the light (LightData's river and ocean colours).
+ * In slime and magma: how far you can see (yards), and the colour the view fades to where the
+ * liquid gives none. In water and the sea the view is as above them (see updateLighting).
  */
-const UNDERWATER: Record<LiquidKind, { far: number; color: number }> = {
-	water: { far: 70, color: 0x0b2c3c },
-	ocean: { far: 100, color: 0x08243a },
+const UNDERWATER: Record<'slime' | 'magma', { far: number; color: number }> = {
 	slime: { far: 25, color: 0x2e4f10 },
 	magma: { far: 10, color: 0x9a3208 },
 };
@@ -1880,34 +1878,27 @@ export class Viewer {
 		this.fog.far = Math.max(fogFar, 9000 + alt * 14);
 		this.applyWeatherLight(state?.colors.skyFog ?? null);
 
-		// Under water, as in the game: the view closes in and fades to the water's colour, darker
-		// the deeper you are.
 		this.underwater = this.liquidAt(this.camera.position);
-		this.sky.mesh.visible = !this.underwater;
+		// In water and the sea the view is the same as above it (sky, fog and light, nothing tinted
+		// or dimmed, so even Vashj'ir's depths show). In slime and magma, as in the game, the view
+		// closes in and fades to the liquid's colour, darker the deeper you are.
+		const u = this.underwater;
+		const murky = u && (u.kind === 'slime' || u.kind === 'magma') ? { ...u, kind: u.kind } : null;
+		this.sky.mesh.visible = !murky;
 		const base = this.lowestGroundAround(this.camera.position);
 		this.fogBase = this.fogBase === null ? base : this.fogBase + (base - this.fogBase) * 0.15;
 		this.fogLook.base = this.fogBase;
-		this.post.setFog(this.underwater || !state || this.clearView ? null : this.fogLook);
+		this.post.setFog(murky || !state || this.clearView ? null : this.fogLook);
 		setLiquidsFromBelow(this.underwater !== null);
-		if (this.underwater) {
-			const { kind, type, surface } = this.underwater;
+		if (murky) {
+			const { kind, type, surface } = murky;
 			const look = UNDERWATER[kind];
 			const liquid = this.liquidLooks?.types[type];
-			const color = new THREE.Color(look.color);
-			if (liquid?.color) {
-				color.setHex(liquid.color);
-			} else if (state && (kind === 'water' || kind === 'ocean')) {
-				const c = state.colors;
-				// Rivers and lakes use the zone light's river colours, the sea its ocean ones; either stands in for the other.
-				const [first, second] = kind === 'ocean' ? [c.oceanFar, c.riverFar] : [c.riverFar, c.oceanFar];
-				const far = first.getHex() ? first : second.getHex() ? second : null;
-				if (far) color.copy(far);
-			}
+			const color = new THREE.Color(liquid?.color || look.color);
+			// The liquid's own darkening where it has one, otherwise a gentle one over the first 60 yards.
 			const depth = Math.max(0, surface - this.camera.position.y);
-			// The liquid's own darkening where it has one; otherwise a gentle one over the first 60 yards.
 			const reach = liquid?.darkenDepth ? Math.min(1, depth / liquid.darkenDepth) : Math.min(1, depth / 60);
-			const fogDarken = liquid?.darkenDepth ? liquid.fogDarken : 0.55;
-			color.multiplyScalar(1 - reach * fogDarken);
+			color.multiplyScalar(1 - reach * (liquid?.darkenDepth ? liquid.fogDarken : 0.55));
 			// Light too (only when just set from the zone's light, so it doesn't compound).
 			if (state) {
 				const ambient = 1 - reach * (liquid?.darkenDepth ? liquid.ambientDarken : 0.4);
