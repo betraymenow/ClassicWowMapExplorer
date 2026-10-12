@@ -971,6 +971,11 @@ export class Viewer {
 	private pendingHash = '';
 	private pendingHashSince = 0;
 
+	/** The view as the URL hash would hold it right now (the URL itself only follows once still). */
+	viewHash(): string | null {
+		return this.currentHash();
+	}
+
 	private currentHash(): string | null {
 		const pos = this.camera.position;
 		const at = this.terrain.locate(pos.x, pos.z);

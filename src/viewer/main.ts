@@ -61,6 +61,38 @@ function setUpEdition(): void {
 			if (own && page.includes('<script') && !page.includes(own)) link.style.display = '';
 		}, () => {});
 	}
+	// Switching keeps the place and view: the other build opens at this one's URL hash
+	// (#continent/tileX/tileY/height/yaw/pitch), taken now rather than from the URL, which only
+	// follows the camera once it has been still a while. Eastern Kingdoms (0) and Kalimdor (1)
+	// are the same in both; Zandalar (2, retail only) and dungeons (d<map>, classic only) aren't
+	// in the other, which then opens at its start.
+	// The time of day too, when it's been moved off the local clock (Y, or the View panel):
+	// handed over in this tab's session storage, which both builds share (one origin).
+	link.addEventListener('click', (e) => {
+		const hash = infoViewer?.viewHash() ?? location.hash;
+		const shared = /^#[01]\//.test(hash);
+		e.preventDefault();
+		try {
+			if (infoViewer && !infoViewer.timeIsLocal) sessionStorage.setItem(SWITCH_TIME_KEY, String(infoViewer.timeMinutes));
+			else sessionStorage.removeItem(SWITCH_TIME_KEY);
+		} catch {
+			// No session storage (private windows): the other build starts at the local time.
+		}
+		location.href = link.href.split('#')[0] + (shared ? hash : '');
+	});
+}
+
+const SWITCH_TIME_KEY = 'mapExplorer.switchTime';
+
+/** On arriving from the other build: the time of day it was showing (see setUpEdition). */
+function takeSwitchTime(viewer: Viewer): void {
+	try {
+		const minutes = Number(sessionStorage.getItem(SWITCH_TIME_KEY) ?? NaN);
+		sessionStorage.removeItem(SWITCH_TIME_KEY);
+		if (Number.isFinite(minutes)) viewer.timeMinutes = minutes;
+	} catch {
+		// No session storage: nothing was handed over.
+	}
 }
 
 const storage = createStorageClient((message) => showProgress(message));
@@ -125,10 +157,14 @@ async function useSource(init: SourceInit): Promise<void> {
 		const products = (await storage.setSource(init)).filter((p) => p.product.startsWith('wow'));
 		const select = $<HTMLSelectElement>('product');
 		select.replaceChildren(...products.map((p) => new Option(`${p.product} ${p.version}`, p.product)));
-		// Classic prefers a classic build (the continent file IDs are the classic ones); retail the live game.
+		// Classic prefers a vanilla build (the continent file IDs are the classic ones): Classic Era
+		// first, as "wow_classic" is the progression realms (Mists of Pandaria Classic and so on),
+		// with Cataclysm's world. Retail takes the live game.
 		const preferred = RETAIL
 			? products.find((p) => p.product === 'wow')
-			: products.find((p) => p.product === 'wow_classic_beta') ?? products.find((p) => p.product.startsWith('wow_classic'));
+			: products.find((p) => p.product === 'wow_classic_era')
+				?? products.find((p) => p.product === 'wow_classic_beta')
+				?? products.find((p) => p.product.startsWith('wow_classic'));
 		if (preferred) {
 			// Nothing to choose: straight in.
 			select.value = preferred.product;
@@ -235,6 +271,7 @@ async function explore(): Promise<void> {
 		const ui = loadUiAssets(storage);
 		const viewer = new Viewer($('view'), storage, showHud, showInfo, $('nameplates'));
 		infoViewer = viewer;
+		takeSwitchTime(viewer);
 		setUpFullscreen($('view'));
 		// For poking at the scene from the console (and test scripts) while developing.
 		if (import.meta.env.DEV) (globalThis as unknown as { mapExplorerViewer: Viewer }).mapExplorerViewer = viewer;
