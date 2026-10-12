@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SunLight } from 'three/addons/lights/SunLight.js';
 import { TILE_SIZE } from '../formats/adt';
 import { KNOWN_MAPS } from '../explorer/maps';
+import { RETAIL } from '../edition';
 import type { FarTile, InstanceMap, MapCategory } from '../explorer/world';
 import type { AsyncStorageApi } from '../worker/protocol';
 import type { AreaInfo } from '../explorer/lighting';
@@ -23,6 +24,7 @@ import { Highlights, type HighlightSettings } from './highlights';
 import { setWalkableShown } from './walkable';
 import { MapLabels } from './mapLabels';
 import { DAY, Lighting, Sky, sunDirection } from './lighting';
+import { Globe } from './globe';
 import { MusicPlayer, type MusicTarget } from './music';
 import { Nameplates, type Plate, type Side } from './nameplates';
 import { CLUTTER_RANGE_DEFAULT, ClutterManager } from './clutter';
@@ -46,7 +48,28 @@ import { WalkControls } from './walkControls';
 /** A dungeon view in the URL hash: #d<map ID>/... */
 const HASH_INSTANCE = /^#d(\d+)\//;
 /** Tiles of open sea between Kalimdor and the Eastern Kingdoms in the shared world. */
-const CONTINENT_GAP = 6;
+/** Tiles of sea between Kalimdor and the Eastern Kingdoms; wider in retail, where the Maelstrom and Deepholm go there. */
+const CONTINENT_GAP = RETAIL ? 14 : 6;
+/** Tiles of sea between everything on the surface and Deepholm, laid out far off out of sight. */
+const UNDERGROUND_GAP = 120;
+/**
+ * Retail: the Maelstrom (Map 730) and Deepholm (646) beneath it, joined eye to temple: the
+ * whirlpool's eye (the middle of its pit, some 400 yards under the sea, in its map's tiles) sits
+ * over the middle of Deepholm's Temple of Earth (the chunks of AreaTable 5303). Within
+ * MAELSTROM_EYE yards of the eye the pit has no floor, and going down past MAELSTROM_DEPTH comes
+ * out at DEEPHOLM_ENTRY over the temple, still going down, as far from its middle as from the
+ * eye's; climbing above DEEPHOLM_CEILING within DEEPHOLM_SHAFT yards of the temple goes back up
+ * into the eye.
+ */
+const MAELSTROM_MAP = 730;
+const DEEPHOLM_MAP = 646;
+const MAELSTROM_EYE_TILE = { x: 30.49, y: 30.33 };
+const TEMPLE_OF_EARTH_TILE = { x: 31.0, y: 30.03 };
+const MAELSTROM_EYE = 200;
+const MAELSTROM_DEPTH = -300;
+const DEEPHOLM_ENTRY = 1150;
+const DEEPHOLM_CEILING = 1350;
+const DEEPHOLM_SHAFT = 900;
 /** WoW world coordinates are measured from the centre of the 64x64 tile grid. */
 const MAP_ORIGIN = 32 * TILE_SIZE;
 const SKY = new THREE.Color(0x9ec4e4);
@@ -91,6 +114,12 @@ const UNDERWATER: Record<'slime' | 'magma', { far: number; color: number }> = {
 const FAR_PAST_FOG = 1.1;
 /** Yards; the far plane never comes closer than this, so the sky dome (1000 yd around the camera) always shows. */
 const MIN_FAR = 1500;
+/** Climbing above this height (yards over the ground) shows Azeroth as a planet (see Globe). */
+const GLOBE_ENTER_ALTITUDE = 40000;
+/** Height (yards) the camera comes back down to from the planet: well under where it would switch again. */
+const GLOBE_EXIT_HEIGHT = 18000;
+/** How steeply (radians below level) the camera looks on coming down from the planet. */
+const GLOBE_EXIT_PITCH = 1.05;
 /** With no fog, the view reaches this far: past every continent and map laid out in the sea. */
 const CLEAR_VIEW_FAR = 200000;
 /** Yards the sun's shadows reach from the camera on the ground, and how much further per yard of altitude. */
@@ -353,6 +382,10 @@ export class Viewer {
 	private readonly fog = new THREE.Fog(SKY, 1000, 8000);
 	private continents: ContinentPlacement[] = [];
 	private frames = 0;
+	/** Azeroth as a planet, made the first time it is shown. */
+	private globe: Globe | null = null;
+	/** Each continent's land tiles (its own grid), for the planet's picture. */
+	private readonly landTiles = new Map<number, [number, number][]>();
 	private shadowFrame = 0;
 	/** 0-1: shadows fade out as the light passes from the sun to the moon at dusk and back at dawn. */
 	private shadowStrength = 1;
@@ -484,7 +517,10 @@ export class Viewer {
 		this.controls = new FlyControls(this.camera, canvas);
 		this.walker = new WalkControls(this.camera, canvas);
 		// Anything that puts the free camera somewhere (a flight, going to a place) ends walking first.
-		this.controls.onTakeOver = () => this.stopWalking();
+		this.controls.onTakeOver = () => {
+			this.closeGlobe();
+			this.stopWalking();
+		};
 		this.groundPass = new GroundDistancePass(this.renderer);
 		// Antialiased there rather than on the canvas.
 		this.post = new PostPass(this.renderer, storage);
@@ -552,6 +588,8 @@ export class Viewer {
 	 * never captured: dragging looks around).
 	 */
 	private onClick(e: MouseEvent): void {
+		// On the planet, clicks turn it (see Globe); nothing in the world below is picked.
+		if (this.globe?.active) return;
 		// Walking, a drag that turned the camera isn't a click.
 		if (this.walker.active) {
 			const hit = this.walker.wasDrag ? null : this.pickAt(e);
@@ -867,6 +905,7 @@ export class Viewer {
 			loaded.push({ map, tiles: await this.storage.loadFarTiles(map.wdt, map.wdl) });
 		}
 		this.continents = layoutContinents(loaded);
+		loaded.forEach(({ map, tiles }) => this.landTiles.set(map.mapId, tiles.filter((t) => t.hasAdt).map((t): [number, number] => [t.x, t.y])));
 		loaded.forEach(({ tiles }, i) => this.terrain.addContinent(this.continents[i], tiles));
 		onStatus('Placing dungeons and other maps');
 		await this.placeMaps();
@@ -1228,6 +1267,106 @@ export class Viewer {
 		this.controls.flyTo(new THREE.Vector3(center.x, Math.max(fitHeight, fitWidth) * 1.05, center.y), 0, -Math.PI / 2 + 0.001, 2.5);
 	}
 
+	/** Whether Azeroth is being shown as a planet. */
+	get globeShown(): boolean {
+		return this.globe?.active ?? false;
+	}
+
+	/** O: Azeroth as a planet, turned to where the camera is; again, back down there. */
+	toggleGlobe(): void {
+		if (this.globe?.active) this.globe.leaveAtCenter();
+		else this.enterGlobe();
+	}
+
+	private enterGlobe(): void {
+		if (this.walker.active || this.shot || this.globe?.active) return;
+		if (!this.globe) {
+			// The surface only: Deepholm lies underground (see checkDeepholm).
+			const continents = this.continents.filter((c) => !c.instance && !KNOWN_MAPS.find((m) => m.mapId === c.mapId)?.underground);
+			this.globe = new Globe(this.canvas, this.storage, continents, (c) => this.landTiles.get(c.mapId) ?? []);
+			// Back down so the place at the globe's centre is at the view's centre, seen from as
+			// high as the globe was (but under where the globe would take over again), looking
+			// north and down at it.
+			this.globe.onExit = (to) => {
+				this.closeGlobe();
+				const height = THREE.MathUtils.clamp(to.height, 1500, GLOBE_EXIT_HEIGHT);
+				const back = height / Math.tan(GLOBE_EXIT_PITCH);
+				this.controls.set(new THREE.Vector3(to.tileX * TILE_SIZE, height, to.tileY * TILE_SIZE + back), 0, -GLOBE_EXIT_PITCH);
+			};
+		}
+		const center = this.viewCenter();
+		this.globe.enter(center.x / TILE_SIZE, center.z / TILE_SIZE, center.height);
+		// The world below keeps its camera; the keys and mouse are the planet's.
+		this.controls.enabled = false;
+		document.documentElement.classList.add('globe-view');
+	}
+
+	/**
+	 * The point at the middle of the view: where the camera's line of sight meets sea level, if
+	 * it looks down steeply enough to (else the place under the camera), and the camera's height.
+	 */
+	private viewCenter(): { x: number; z: number; height: number } {
+		const pos = this.camera.position;
+		const dir = this.camera.getWorldDirection(new THREE.Vector3());
+		const height = Math.max(pos.y, this.controls.altitude);
+		if (dir.y < -0.15 && pos.y > 0) {
+			const t = Math.min(pos.y / -dir.y, height * 4);
+			return { x: pos.x + dir.x * t, z: pos.z + dir.z * t, height };
+		}
+		return { x: pos.x, z: pos.z, height };
+	}
+
+	/** A point given in a continent's own tiles, in world yards (x, z); null if it isn't laid out. */
+	private pointOn(mapId: number, tile: { x: number; y: number }): THREE.Vector2 | null {
+		const c = this.continents.find((p) => p.mapId === mapId);
+		return c ? new THREE.Vector2((tile.x + c.offsetX) * TILE_SIZE, (tile.y + c.offsetY) * TILE_SIZE) : null;
+	}
+
+	/** Whether a world position is in the whirlpool's eye, where its pit has no floor. */
+	private inMaelstromEye(x: number, z: number): boolean {
+		if (!RETAIL) return false;
+		const eye = this.pointOn(MAELSTROM_MAP, MAELSTROM_EYE_TILE);
+		return !!eye && Math.hypot(x - eye.x, z - eye.y) < MAELSTROM_EYE;
+	}
+
+	private lastPassage = 0;
+
+	/**
+	 * Deepholm lies under the Maelstrom: down through the whirlpool's eye and out high over the
+	 * Temple of Earth, still going down (the camera keeps its heading, and its place relative to
+	 * the eye's middle becomes its place relative to the temple's); up past Deepholm's ceiling
+	 * over the temple and back into the eye.
+	 */
+	private checkDeepholm(now: number): void {
+		if (!RETAIL || this.walker.active || this.shot || now - this.lastPassage < 1500) return;
+		const eye = this.pointOn(MAELSTROM_MAP, MAELSTROM_EYE_TILE);
+		const temple = this.pointOn(DEEPHOLM_MAP, TEMPLE_OF_EARTH_TILE);
+		if (!eye || !temple) return;
+		const pos = this.camera.position;
+		const fromEye = new THREE.Vector2(pos.x, pos.z).sub(eye);
+		const fromTemple = new THREE.Vector2(pos.x, pos.z).sub(temple);
+		let to: THREE.Vector3 | null = null;
+		if (fromEye.length() < MAELSTROM_EYE && pos.y < MAELSTROM_DEPTH) {
+			to = new THREE.Vector3(temple.x + fromEye.x, DEEPHOLM_ENTRY, temple.y + fromEye.y);
+		} else if (fromTemple.length() < DEEPHOLM_SHAFT && pos.y > DEEPHOLM_CEILING) {
+			// Back inside the eye (its pit has no floor only there), however far off the temple.
+			fromTemple.clampLength(0, MAELSTROM_EYE * 0.8);
+			to = new THREE.Vector3(eye.x + fromTemple.x, MAELSTROM_DEPTH + 60, eye.y + fromTemple.y);
+		}
+		if (!to) return;
+		this.lastPassage = now;
+		passageFlash();
+		this.controls.set(to, this.controls.yaw, this.controls.pitch);
+	}
+
+	/** Leaves the planet without moving the camera (something else is about to). */
+	private closeGlobe(): void {
+		if (!this.globe?.active) return;
+		this.globe.close();
+		this.controls.enabled = true;
+		document.documentElement.classList.remove('globe-view');
+	}
+
 	/** An angled view over one continent. */
 	goToContinent(index: number): void {
 		const c = this.continents[index];
@@ -1247,7 +1386,7 @@ export class Viewer {
 			if (this.shot) this.endShot();
 			else this.startShot();
 		} else if (e.code === 'Escape' && this.shot) this.endShot();
-		else if (e.code === 'KeyO') this.overview();
+		else if (e.code === 'KeyO') this.toggleGlobe();
 		else if (e.code === 'KeyT') this.controls.flyTo(this.startPosition(), 0, -0.3, 2.5);
 		else if (e.code.startsWith('Digit')) this.goToContinent(Number(e.code.slice(5)) - 1);
 		else if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1587,6 +1726,22 @@ export class Viewer {
 	}
 
 	private tick(dt: number, now: number): void {
+		// The planet instead of the world: only time (for its sun) goes on below.
+		if (this.globe?.active) {
+			if (this.timeRunning) {
+				this.timeOffset += this.timeRunning * TIME_RATE * dt;
+				if (now - this.lastTimeChange > 100) {
+					this.lastTimeChange = now;
+					this.onChange('time');
+				}
+			}
+			this.globe.update(dt, this.timeOfDay());
+			// Leaving by zooming in already put the camera back in the world; draw that from now on.
+			if (this.globe.active) {
+				this.globe.render(this.renderer);
+				return;
+			}
+		}
 		// The camera holds still while a screenshot is prepared.
 		if (!this.shot) {
 			if (this.walker.active) {
@@ -1594,7 +1749,10 @@ export class Viewer {
 				const cam = this.camera.position;
 				this.controls.mirror(this.walker.yaw, this.walker.pitch, Math.max(0, cam.y - Math.max(this.terrain.surfaceAt(cam.x, cam.z), 0)), this.walker.speed);
 			} else {
-				this.controls.update(dt, (x, z) => this.terrain.heightAt(x, z), (x, z) => this.terrain.surfaceAt(x, z));
+				// The whirlpool's eye has no floor: it goes on down to Deepholm (see checkDeepholm).
+				this.controls.update(dt, (x, z) => (this.inMaelstromEye(x, z) ? -Infinity : this.terrain.heightAt(x, z)), (x, z) => this.terrain.surfaceAt(x, z));
+				// Climbing high enough (by hand, not on a flight between views) shows the planet.
+				if (this.controls.altitude > GLOBE_ENTER_ALTITUDE && !this.controls.flying) this.enterGlobe();
 			}
 		}
 		this.character?.update(dt, this.walker);
@@ -1606,6 +1764,7 @@ export class Viewer {
 		if (now - this.lastTriggerCheck > 100) {
 			this.lastTriggerCheck = now;
 			this.checkTriggers();
+			this.checkDeepholm(now);
 		}
 		// While T is held the light follows every frame, so the sun glides rather than steps.
 		if (this.timeRunning) {
@@ -2157,6 +2316,36 @@ function layoutContinents(loaded: { map: (typeof KNOWN_MAPS)[number]; tiles: Far
 	let anchor: ReturnType<typeof extent> | null = null;
 	for (const { map, tiles } of loaded) {
 		const e = extent(tiles);
+		if (map.underground && placements.length >= 2) {
+			// Out of sight far south of everything, centred under the Maelstrom's longitude: it's
+			// reached by going down into the Maelstrom (Viewer.checkDeepholm), not flown to.
+			const placed = placements.flatMap((p, i) => loaded[i].tiles.map((t) => ({ x: t.x + p.offsetX, y: t.y + p.offsetY })));
+			const maelstrom = placements.findIndex((p) => p.mapId === MAELSTROM_MAP);
+			const xs = tiles.map((t) => t.x);
+			const above = maelstrom >= 0 ? loaded[maelstrom].tiles.map((t) => t.x + placements[maelstrom].offsetX) : placed.map((f) => f.x);
+			const offsetX = Math.round((Math.min(...above) + Math.max(...above) + 1) / 2 - (Math.min(...xs) + Math.max(...xs) + 1) / 2);
+			const offsetY = Math.max(...placed.map((f) => f.y)) + 1 + UNDERGROUND_GAP - Math.min(...tiles.map((t) => t.y));
+			placements.push({ name: map.name, mapId: map.mapId, wdt: map.wdt, offsetX, offsetY });
+			continue;
+		}
+		if (map.between && placements.length >= 2) {
+			// In the sea between Kalimdor (west) and the Eastern Kingdoms (east), centred in the gap:
+			// the first level with the continents' middles, each next one just south of the last.
+			const placedX = (i: number) => loaded[i].tiles.map((t) => t.x + placements[i].offsetX);
+			const placedY = (i: number) => loaded[i].tiles.map((t) => t.y + placements[i].offsetY);
+			const [west, east] = Math.min(...placedX(1)) < Math.min(...placedX(0)) ? [1, 0] : [0, 1];
+			const gapMid = (Math.max(...placedX(west)) + 1 + Math.min(...placedX(east))) / 2;
+			const xs = tiles.map((t) => t.x);
+			const ys = tiles.map((t) => t.y);
+			const offsetX = Math.round(gapMid - (Math.min(...xs) + Math.max(...xs) + 1) / 2);
+			const previous = placements.findLastIndex((p, i) => loaded[i].map.between);
+			const continentsMidY = [0, 1].reduce((s, i) => s + (Math.min(...placedY(i)) + Math.max(...placedY(i))) / 2, 0) / 2;
+			const offsetY = previous >= 0
+				? Math.max(...placedY(previous)) + 2 - Math.min(...ys)
+				: Math.round(continentsMidY - (Math.min(...ys) + Math.max(...ys)) / 2);
+			placements.push({ name: map.name, mapId: map.mapId, wdt: map.wdt, offsetX, offsetY });
+			continue;
+		}
 		if (placements.length >= 2) {
 			// A third continent (Zandalar) goes in the sea south of the first two, between them.
 			const placed = loaded.slice(0, placements.length).flatMap(({ tiles: t }, i) => t.map((f) => ({ x: f.x + placements[i].offsetX, y: f.y + placements[i].offsetY })));
@@ -2185,4 +2374,24 @@ function layoutContinents(loaded: { map: (typeof KNOWN_MAPS)[number]; tiles: Far
 function formatDuration(seconds: number): string {
 	const s = Math.round(seconds);
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Going between the Maelstrom and Deepholm: the screen goes dark for a moment and clears again,
+ * hiding the jump and the new place's first loading.
+ */
+function passageFlash(): void {
+	let veil = document.getElementById('passage-veil');
+	if (!veil) {
+		veil = document.createElement('div');
+		veil.id = 'passage-veil';
+		document.body.append(veil);
+	}
+	veil.classList.remove('clearing');
+	veil.classList.add('dark');
+	// The next frame starts it clearing, slowly.
+	requestAnimationFrame(() => requestAnimationFrame(() => {
+		veil.classList.add('clearing');
+		veil.classList.remove('dark');
+	}));
 }

@@ -1711,3 +1711,26 @@ html.cursor-hidden, html.cursor-hidden * {
 html.drag-lock #crosshair {
 	display: none !important;
 }
+
+/* Azeroth as a planet (O, or climbing high): nothing pinned to places in the world below. */
+html.globe-view :is(#nameplates, #crosshair, #zone-banner, .map-label, .beacon) {
+	display: none !important;
+}
+
+/* Between the Maelstrom and Deepholm: a moment of swirling dark (see passageFlash). */
+#passage-veil {
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	opacity: 0;
+	background: radial-gradient(circle at 50% 50%, #0a1a24 0%, #04080c 55%, #000 100%);
+	z-index: 50;
+}
+
+#passage-veil.dark {
+	opacity: 1;
+}
+
+#passage-veil.clearing {
+	transition: opacity 1.4s ease-out;
+}

@@ -2,7 +2,8 @@ import { parseAdtRoot, TILE_CELLS, TILE_SIZE, tileGrids } from '../formats/adt';
 import { parseAdtTex } from '../formats/adtTex';
 import { blpTexture, decodeBlp, type Image, type TextureData } from '../formats/blp';
 import type { LiquidKind } from '../formats/mh2o';
-import { parseWdl, WDL_CELLS } from '../formats/wdl';
+import { parseWdl, WDL_CELLS, type WdlTile } from '../formats/wdl';
+import type { WdtTile } from '../formats/wdt';
 import { DB2_FILES, footstepSounds, liquidKinds, liquidLooks, loadTable, lockKinds, type FootstepSounds, type LiquidLooks, type LockKind } from './clientDb';
 import { loadAreas, loadLighting, type AreaInfo, type LightingData } from './lighting';
 import { buildLiquidMeshes, type LiquidMesh } from './liquidMesh';
@@ -180,9 +181,10 @@ export class WorldLoader {
 		return out.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
+	/** Low-detail terrain for a map: from its WDL, or, without one (wdlFdid 0), from its ADTs. */
 	async loadFarTiles(wdtFdid: number, wdlFdid: number): Promise<FarTile[]> {
 		const wdt = await this.maps.wdt(wdtFdid);
-		const wdl = parseWdl(await this.storage.readFile(wdlFdid));
+		const wdl = wdlFdid ? parseWdl(await this.storage.readFile(wdlFdid)) : await this.farFromAdts(wdtFdid);
 		return wdl.map((t) => ({
 			x: t.x,
 			y: t.y,
@@ -192,13 +194,40 @@ export class WorldLoader {
 		}));
 	}
 
-	/** Baked map textures, starting at the largest mip no bigger than maxSize. */
+	/**
+	 * WDL-sized heights (17x17 outer, 16x16 inner) sampled from each tile's ADT, for maps whose
+	 * WDL can't be found (newer maps' are unnamed): every 8th of the ADT's 129x129 grid, and
+	 * the middle of each 8x8 block for the inner points.
+	 */
+	private async farFromAdts(wdtFdid: number): Promise<WdlTile[]> {
+		const wdt = await this.maps.wdt(wdtFdid);
+		const n = TILE_CELLS;
+		const step = n / WDL_CELLS;
+		const tiles = await Promise.all(wdt.tiles.filter((t) => t !== null).map(async (t): Promise<WdlTile | null> => {
+			try {
+				const { outer: grid } = tileGrids(parseAdtRoot(await this.storage.readFile(t.files.root)));
+				const outer = new Float32Array((WDL_CELLS + 1) ** 2);
+				const inner = new Float32Array(WDL_CELLS ** 2);
+				for (let r = 0; r <= WDL_CELLS; r++) for (let c = 0; c <= WDL_CELLS; c++) outer[r * (WDL_CELLS + 1) + c] = grid[r * step * (n + 1) + c * step];
+				for (let r = 0; r < WDL_CELLS; r++) for (let c = 0; c < WDL_CELLS; c++) inner[r * WDL_CELLS + c] = grid[(r * step + step / 2) * (n + 1) + c * step + step / 2];
+				return { x: t.x, y: t.y, outer, inner };
+			} catch {
+				return null;
+			}
+		}));
+		return tiles.filter((t): t is WdlTile => t !== null);
+	}
+
+	/**
+	 * Baked map textures, starting at the largest mip no bigger than maxSize. Maps without them
+	 * (the Maelstrom, Deepholm) use their minimap images instead, so they don't look bare from afar.
+	 */
 	async loadTileTextures(wdtFdid: number, coords: [number, number][], maxSize: number, compressed: boolean): Promise<TileTexture[]> {
 		const wdt = await this.maps.wdt(wdtFdid);
 		return Promise.all(coords.map(async ([x, y]) => ({
 			x,
 			y,
-			texture: await this.readTexture(wdt.tiles[y * 64 + x]?.files.mapTexture ?? 0, maxSize, compressed),
+			texture: await this.readTexture(farTextureOf(wdt.tiles[y * 64 + x]), maxSize, compressed),
 		})));
 	}
 
@@ -236,7 +265,7 @@ export class WorldLoader {
 			terrain: null,
 			fallback: {
 				geometry: buildTerrainMesh(grids.outer, grids.inner, TILE_CELLS, TILE_SIZE, grids.holes, 30),
-				texture: await this.readTexture(tile.files.mapTexture, Infinity, compressed),
+				texture: await this.readTexture(farTextureOf(tile), Infinity, compressed),
 			},
 			heights: grids.outer,
 			holes: grids.holes,
@@ -459,4 +488,9 @@ export class WorldLoader {
 			return null;
 		}
 	}
+}
+
+/** A tile's baked map texture, or its minimap image where it has none; 0 for neither. */
+function farTextureOf(tile: WdtTile | null | undefined): number {
+	return tile ? tile.files.mapTexture || tile.files.minimap : 0;
 }

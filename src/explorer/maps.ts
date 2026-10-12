@@ -6,12 +6,24 @@ import { downscale } from './image';
 import { parseWdt, TILE_FILE_KINDS, type TileFileKind, type Wdt, type WdtTile } from '../formats/wdt';
 import { RETAIL } from '../edition';
 
-/** Continents whose file IDs are known; Map.db2 will replace this list. */
-export const KNOWN_MAPS = [
+/**
+ * Continents whose file IDs are known; Map.db2 will replace this list. wdl 0: none found, so the
+ * distant terrain is made from the ADTs. `between`: laid out in the sea between Kalimdor and
+ * the Eastern Kingdoms (the Maelstrom) rather than south of them. `underground`: under the
+ * Maelstrom in the game (Deepholm); laid out far off, out of sight, and reached by going down
+ * into the Maelstrom (see the viewer's checkDeepholm). `detailDistance`: yards out to which its
+ * tiles load in full detail (with all their models), for a small map whose whole look is in its
+ * models (the whirlpool), so it shows from afar.
+ */
+export const KNOWN_MAPS: { name: string; directory: string; mapId: number; wdt: number; wdl: number; between?: boolean; underground?: boolean; detailDistance?: number }[] = [
 	{ name: 'Eastern Kingdoms', directory: 'Azeroth', mapId: 0, wdt: 775971, wdl: 775970 },
 	{ name: 'Kalimdor', directory: 'Kalimdor', mapId: 1, wdt: 782779, wdl: 782778 },
 	// Retail only; its WDL isn't right before its WDT.
-	...(RETAIL ? [{ name: 'Zandalar', directory: 'Zandalar', mapId: 1642, wdt: 1436413, wdl: 1436416 }] : []),
+	...(RETAIL ? [
+		{ name: 'Zandalar', directory: 'Zandalar', mapId: 1642, wdt: 1436413, wdl: 1436416 },
+		{ name: 'The Maelstrom', directory: 'MaelstromZone', mapId: 730, wdt: 816998, wdl: 0, between: true, detailDistance: 8000 },
+		{ name: 'Deepholm', directory: 'Deephome', mapId: 646, wdt: 816934, wdl: 0, underground: true },
+	] : []),
 ];
 
 export type FileAvailability = Record<TileFileKind, Partial<Record<FileStatus | 'none', number>>>;

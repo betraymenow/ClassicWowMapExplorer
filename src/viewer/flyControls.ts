@@ -200,6 +200,11 @@ export class FlyControls {
 		return document.pointerLockElement === this.element;
 	}
 
+	/** Gliding between views (flyTo) or riding a flight path or transport, rather than flown by hand. */
+	get flying(): boolean {
+		return this.flight !== null || this.riding !== null;
+	}
+
 	/** Adjusts a move so it doesn't pass through solid things; set by the viewer. */
 	collide: ((from: THREE.Vector3, move: THREE.Vector3) => THREE.Vector3) | null = null;
 

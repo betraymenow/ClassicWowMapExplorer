@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TILE_CELLS, TILE_SIZE } from '../formats/adt';
 import { WDL_CELLS } from '../formats/wdl';
+import { KNOWN_MAPS } from '../explorer/maps';
 import { ALPHA_ATLAS_SIZE, type SplatGeometry } from '../explorer/splatMesh';
 import type { FarTile, NearTile } from '../explorer/world';
 import type { TerrainGeometry } from '../explorer/terrainMesh';
@@ -17,6 +18,13 @@ import { createTexture } from './textures';
 /** Full-detail tiles load within this distance of the camera and unload beyond the drop distance. */
 const NEAR_LOAD_DISTANCE = 900;
 const NEAR_DROP_DISTANCE = 1400;
+/** Past the load distance, how much further a tile drops (so it doesn't flicker at the edge). */
+const NEAR_DROP_MARGIN = NEAR_DROP_DISTANCE - NEAR_LOAD_DISTANCE;
+
+/** Full-detail load distance for a map: its own (KNOWN_MAPS detailDistance, small maps seen whole from afar) or the usual. */
+function nearLoadDistance(mapId: number): number {
+	return KNOWN_MAPS.find((m) => m.mapId === mapId)?.detailDistance ?? NEAR_LOAD_DISTANCE;
+}
 const MAX_NEAR_IN_FLIGHT = 3;
 /** Buildings show out to this distance; scattered doodads only on full-detail tiles. */
 const WMO_DISTANCE = 3000;
@@ -472,10 +480,11 @@ export class TerrainManager {
 			const dy = Math.max(0, camera.y - t.maxHeight);
 			t.distance = Math.hypot(this.planarDistance(t, camera), dy);
 			const held = this.held?.has(t) ?? false;
-			if (t.near && t.distance > NEAR_DROP_DISTANCE && !held) this.dropNear(t);
-			else if (t.hasAdt && !t.near && !t.nearLoading && !t.nearFailed && (t.distance < NEAR_LOAD_DISTANCE || held)) wanted.push(t);
+			const load = nearLoadDistance(t.continent.mapId);
+			if (t.near && t.distance > load + NEAR_DROP_MARGIN && !held) this.dropNear(t);
+			else if (t.hasAdt && !t.near && !t.nearLoading && !t.nearFailed && (t.distance < load || held)) wanted.push(t);
 			// Doodads wait for the detailed terrain so they sit on the right ground.
-			const detailed = t.hasAdt ? !!t.near : t.distance < NEAR_LOAD_DISTANCE || held;
+			const detailed = t.hasAdt ? !!t.near : t.distance < load || held;
 			const level: ObjectLevel = detailed ? 'all' : t.distance < WMO_DISTANCE || held ? 'wmo' : 'none';
 			if (level !== t.objectLevel) {
 				t.objectLevel = level;
@@ -498,7 +507,7 @@ export class TerrainManager {
 			const sharedTextures = tile.terrain?.textures ?? [];
 			const textures = await this.layerTextures.acquire(sharedTextures);
 			// The camera may have moved on while this loaded.
-			if (t.distance > NEAR_DROP_DISTANCE && !this.held?.has(t)) {
+			if (t.distance > nearLoadDistance(t.continent.mapId) + NEAR_DROP_MARGIN && !this.held?.has(t)) {
 				this.layerTextures.release(sharedTextures);
 				return;
 			}

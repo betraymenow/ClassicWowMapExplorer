@@ -49,11 +49,12 @@ export const DETAIL_RANGE_MAX = 4;
 
 /**
  * View distance for a doodad of a given (scaled) radius, like the game's doodad LOD: small props
- * vanish within a few hundred yards, big trees stay visible much further. scale stretches or
- * shrinks it all (the detail distance setting).
+ * vanish within a few hundred yards, big trees stay visible much further. Huge ones (hundreds of
+ * yards across, like the Maelstrom's whirlpool and clouds) go on past the usual limit, as far as
+ * their size warrants. scale stretches or shrinks it all (the detail distance setting).
  */
 function viewDistance(radius: number, scale: number): number {
-	return THREE.MathUtils.clamp(radius * 80, 150, 1600) * scale;
+	return Math.max(THREE.MathUtils.clamp(radius * 80, 150, 1600), Math.min(radius * 30, 12000)) * scale;
 }
 
 /** One model's geometry, drawn with a single InstancedMesh for every placed copy. */
