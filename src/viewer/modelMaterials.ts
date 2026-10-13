@@ -1,22 +1,39 @@
 import * as THREE from 'three';
 import type { ModelMaterial } from '../explorer/objects';
 import { liquidTime } from './terrainMaterials';
-import { Blend } from '../formats/m2';
+import { Blend, type ColorKeys } from '../formats/m2';
 import { setNoShadow } from './shadows';
 import { applyTerrainShadow } from './terrainShadow';
 
-/**
- * Colours for models whose look comes from their colour animations, which aren't read: drawn
- * white without them. The Sword of Sargeras' energy is red in the game.
- */
-const MODEL_TINTS = new Map<number, number>([[1782994, 0xff2a12]]);
+/** Up to this many colour keys are evaluated (ColorKeys keeps at most 8). */
+const MAX_COLOR_KEYS = 8;
 
-/** Tints a model's materials as MODEL_TINTS says (by the model's file ID); no change for others. */
-export function tintModel(fdid: number, materials: THREE.Material[]): void {
-	const tint = MODEL_TINTS.get(fdid);
-	if (tint === undefined) return;
-	for (const m of materials) if ('color' in m && m.color instanceof THREE.Color) m.color.multiply(new THREE.Color(tint));
+/** A colour animation's keys as uniforms: RGB and time (s) per key, the count and the loop length. */
+function colorUniforms(keys: ColorKeys): Record<string, THREE.IUniform> {
+	const n = Math.min(keys.times.length, MAX_COLOR_KEYS);
+	const list = Array.from({ length: MAX_COLOR_KEYS }, (_, k) => {
+		const i = Math.min(k, n - 1);
+		return new THREE.Vector4(keys.values[i * 3], keys.values[i * 3 + 1], keys.values[i * 3 + 2], keys.times[i] / 1000);
+	});
+	return { uColorKeys: { value: list }, uColorCount: { value: n }, uColorLoop: { value: Math.max(keys.times[n - 1] / 1000, 0.001) } };
 }
+
+/** GLSL: the colour animation at time t (s), linear between keys. */
+const COLOR_KEYS_PARS = `
+uniform vec4 uColorKeys[${MAX_COLOR_KEYS}];
+uniform int uColorCount;
+uniform float uColorLoop;
+vec3 colorAt(float t) {
+	float at = mod(t, uColorLoop);
+	vec3 color = uColorKeys[0].rgb;
+	for (int i = 1; i < ${MAX_COLOR_KEYS}; i++) {
+		if (i >= uColorCount) break;
+		vec4 a = uColorKeys[i - 1];
+		vec4 b = uColorKeys[i];
+		if (at >= a.w && at <= b.w) color = mix(a.rgb, b.rgb, clamp((at - a.w) / max(b.w - a.w, 1e-4), 0.0, 1.0));
+	}
+	return color;
+}`;
 
 /** Shared uniforms for a skinned model: its bone texture and loop. */
 export interface SkinUniforms {
@@ -37,7 +54,7 @@ export interface SkinUniforms {
  * geometry has a 'baked' attribute (WMO interior lighting), see applyBakedLighting. skin: the
  * model is animated on the GPU (see applyModelAnimation).
  */
-export function createModelMaterial(m: ModelMaterial, texture: THREE.Texture | null, baked: boolean, skin: SkinUniforms | null = null): THREE.Material {
+export function createModelMaterial(m: ModelMaterial, texture: THREE.Texture | null, baked: boolean, skin: SkinUniforms | null = null, texture2: THREE.Texture | null = null): THREE.Material {
 	// Collision-only triangles are never drawn, but still ray-cast (ray casts don't look at visible).
 	if (m.collision) return new THREE.MeshBasicMaterial({ visible: false });
 	const params: THREE.MeshLambertMaterialParameters = {
@@ -50,7 +67,7 @@ export function createModelMaterial(m: ModelMaterial, texture: THREE.Texture | n
 	};
 	const material = m.unlit ? new THREE.MeshBasicMaterial(params) : new THREE.MeshLambertMaterial(params);
 	if (baked && material instanceof THREE.MeshLambertMaterial) applyBakedLighting(material);
-	else if (skin || m.uvScroll) applyModelAnimation(material, skin, m.uvScroll ?? null);
+	else if (skin || m.uvScroll || texture2 || m.colorKeys) applyModelAnimation(material, skin, m.uvScroll ?? null, texture2 ? { texture: texture2, scroll: m.uvScroll2 ?? null } : null, m.colorKeys ?? null);
 
 	switch (m.blend) {
 		case Blend.Opaque:
@@ -62,9 +79,21 @@ export function createModelMaterial(m: ModelMaterial, texture: THREE.Texture | n
 			material.transparent = true;
 			material.depthWrite = false;
 			break;
+		case Blend.BlendAdd:
+			material.transparent = true;
+			material.depthWrite = false;
+			if (m.exactBlend) {
+				// The colour added as it is and what's behind dimmed by the alpha (premultiplied):
+				// light where the colour is bright, smoke where it's dark.
+				material.blending = THREE.CustomBlending;
+				material.blendSrc = THREE.OneFactor;
+				material.blendDst = THREE.OneMinusSrcAlphaFactor;
+			} else {
+				material.blending = THREE.AdditiveBlending;
+			}
+			break;
 		case Blend.NoAlphaAdd:
 		case Blend.Add:
-		case Blend.BlendAdd:
 			material.transparent = true;
 			material.depthWrite = false;
 			material.blending = THREE.AdditiveBlending;
@@ -190,18 +219,32 @@ export function createSkinnedDepthMaterial(skin: SkinUniforms): THREE.MeshDepthM
  * Animates an M2 batch on the GPU: bone skinning from the model's sampled Stand loop (each
  * instance offset by its own phase so copies don't move in step), and steady texture scrolling.
  */
-function applyModelAnimation(material: THREE.MeshLambertMaterial | THREE.MeshBasicMaterial | THREE.MeshDepthMaterial, skin: SkinUniforms | null, uvScroll: [number, number] | null): void {
+function applyModelAnimation(material: THREE.MeshLambertMaterial | THREE.MeshBasicMaterial | THREE.MeshDepthMaterial, skin: SkinUniforms | null, uvScroll: [number, number] | null, second: { texture: THREE.Texture; scroll: [number, number] | null } | null = null, color: ColorKeys | null = null): void {
 	const posed = !!skin?.uPoseA;
-	material.defines = { ...(material.defines ?? {}), ...(skin ? { M2_SKINNED: '' } : {}), ...(posed ? { M2_POSED: '' } : {}), ...(uvScroll ? { M2_UV_SCROLL: '' } : {}) };
+	material.defines = { ...(material.defines ?? {}), ...(skin ? { M2_SKINNED: '' } : {}), ...(posed ? { M2_POSED: '' } : {}), ...(uvScroll ? { M2_UV_SCROLL: '' } : {}), ...(second ? { M2_SECOND_TEXTURE: '' } : {}), ...(color ? { M2_COLOR_KEYS: '' } : {}) };
 	material.onBeforeCompile = (shader) => {
 		Object.assign(shader.uniforms, { uTime: liquidTime, uUvScroll: { value: new THREE.Vector2(...(uvScroll ?? [0, 0])) } }, skin ?? {});
+		if (second) Object.assign(shader.uniforms, { uMap2: { value: second.texture }, uUvScroll2: { value: new THREE.Vector2(...(second.scroll ?? [0, 0])) } });
+		if (color) Object.assign(shader.uniforms, colorUniforms(color));
 		shader.vertexShader = shader.vertexShader
-			.replace('#include <common>', `#include <common>\n${SKIN_VERTEX_PARS}`)
+			.replace('#include <common>', `#include <common>\n${SKIN_VERTEX_PARS}\n#ifdef M2_SECOND_TEXTURE\nuniform vec2 uUvScroll2;\nvarying vec2 vUv2;\n#endif`)
 			.replace('void main() {', `void main() {\n${SKIN_BASE}`)
 			.replace('#include <skinnormal_vertex>', '#ifdef M2_SKINNED\n\tobjectNormal = mat3(animSkin) * objectNormal;\n#endif')
 			.replace('#include <skinning_vertex>', '#ifdef M2_SKINNED\n\ttransformed = (animSkin * vec4(transformed, 1.0)).xyz;\n#endif')
-			.replace('#include <uv_vertex>', '#include <uv_vertex>\n#if defined( M2_UV_SCROLL ) && defined( USE_MAP )\n\tvMapUv += uUvScroll * uTime;\n#endif');
+			.replace('#include <uv_vertex>', '#include <uv_vertex>\n#if defined( M2_SECOND_TEXTURE ) && defined( USE_MAP )\n\tvUv2 = vMapUv + uUvScroll2 * uTime;\n#endif\n#if defined( M2_UV_SCROLL ) && defined( USE_MAP )\n\tvMapUv += uUvScroll * uTime;\n#endif');
+		// The colour animation, looping over its last key.
+		if (color) {
+			shader.fragmentShader = shader.fragmentShader
+				.replace('#include <common>', `#include <common>\n${COLOR_KEYS_PARS}`)
+				.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb *= colorAt(uTime);');
+		}
+		// The second texture multiplied in twice over, colour and alpha (the game's Mod2x).
+		if (second) {
+			shader.fragmentShader = shader.fragmentShader
+				.replace('#include <common>', '#include <common>\nuniform sampler2D uMap2;\nvarying vec2 vUv2;')
+				.replace('#include <map_fragment>', '#include <map_fragment>\n\tvec4 second = texture2D(uMap2, vUv2);\n\tdiffuseColor.rgb *= second.rgb * 2.0;\n\tdiffuseColor.a = min(diffuseColor.a * second.a * 2.0, 1.0);');
+		}
 	};
-	material.customProgramCacheKey = () => `m2-anim-${material.type}-${skin ? 1 : 0}-${posed ? 1 : 0}-${uvScroll ? 1 : 0}`;
+	material.customProgramCacheKey = () => `m2-anim-${material.type}-${skin ? 1 : 0}-${posed ? 1 : 0}-${uvScroll ? 1 : 0}-${second ? 1 : 0}-${color ? 1 : 0}`;
 
 }

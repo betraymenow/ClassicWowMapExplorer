@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import type { CascStorage } from '../casc/storage';
 import { chunks } from '../formats/chunks';
-import { Blend, M2_MATERIAL_TWO_SIDED, M2_MATERIAL_UNFOGGED, M2_MATERIAL_UNLIT, parseM2, parseSkin, type M2File, type M2Skin } from '../formats/m2';
+import { Blend, M2_MATERIAL_TWO_SIDED, M2_MATERIAL_UNFOGGED, M2_MATERIAL_UNLIT, parseM2, parseSkin, type ColorKeys, type M2File, type M2Skin } from '../formats/m2';
 import { attachmentPoints, sequenceAnimation, skinVertex, standAnimation, standPose, type AnimationClip, type AttachmentPoint, type BoneAnimation } from '../formats/m2Pose';
 import { parseParticleEmitters, type ParticleEmitter } from '../formats/m2Particles';
 import {
@@ -13,6 +13,7 @@ import { TILE_SIZE } from '../formats/adt';
 import type { WdtGlobalWmo } from '../formats/wdt';
 import type { LiquidMesh } from './liquidMesh';
 import type { SpawnInfo, SpawnMovement } from './spawns';
+import { SWORD_OF_SARGERAS } from './maps';
 import { compose, fromQuaternion, multiply, rotationX, rotationY, rotationZ, scaling, translation, type Mat4 } from './mat4';
 
 const MDDF_FILE_ID = 0x40;
@@ -49,6 +50,19 @@ export interface ModelMaterial {
 	unlit: boolean;
 	unfogged: boolean;
 	opacity: number;
+	/**
+	 * A second texture multiplied in (twice over, as the game's Mod2x combiner), for models whose
+	 * colour is in it (see SECOND_TEXTURE_MODELS), with its own steady scroll.
+	 */
+	texture2?: number;
+	uvScroll2?: [number, number];
+	/** Its colour animation (see ColorKeys), for the same models. */
+	colorKeys?: ColorKeys;
+	/**
+	 * Blend as the game does rather than this viewer's lighter stand-ins: BlendAdd as
+	 * premultiplied alpha, which can darken (smoke) as well as light. For the same models.
+	 */
+	exactBlend?: true;
 	/** Steady texture scroll in texture units per second (fire, lava, waterfalls). */
 	uvScroll?: [number, number];
 	/** Never drawn: a building's collision-only triangles, there to be walked on and bumped into. */
@@ -213,7 +227,17 @@ export interface M2Options {
 	attachments?: GearAttachment[];
 	/** Which footsteps it makes (see ModelData.footstep). */
 	footstep?: number;
+	/** Keep each batch's second texture (see ModelMaterial.texture2). */
+	secondTexture?: boolean;
 }
+
+/**
+ * Models drawn with their batches' second textures: effects whose colour and detail are in it,
+ * which would otherwise show as plain white shapes. Only these, since other models use second
+ * textures for things (environment maps and the like) that multiplying in would spoil. The
+ * Sword of Sargeras' red energy and smoke.
+ */
+const SECOND_TEXTURE_MODELS = new Set(SWORD_OF_SARGERAS.effects);
 
 /** A gear model (helmet, shoulder, weapon) and its texture, at an M2 attachment point. */
 export interface GearAttachment {
@@ -309,6 +333,14 @@ function prepareM2(storage: CascStorage, fdid: number, stand: boolean, file?: Ui
 	return entry;
 }
 
+/** A batch's second texture (hard-coded ones only) and its scroll, for ModelMaterial. */
+function secondTextureOf(m2: PreparedM2['m2'], combo: number, uvAnimation: number): Pick<ModelMaterial, 'texture2' | 'uvScroll2'> {
+	const texture = m2.textures[m2.textureCombos[combo] ?? -1];
+	if (!texture || texture.type !== 0 || !texture.fdid) return {};
+	const scroll = uvAnimation === 0xffff ? null : m2.uvScroll[uvAnimation + 1] ?? null;
+	return { texture2: texture.fdid, ...(scroll ? { uvScroll2: scroll } : {}) };
+}
+
 /** Picks the batches a look shows (geosets, resolved runtime textures), as a standalone mesh. */
 function dressM2(prepared: PreparedM2, options: M2Options) {
 	const { m2, skin } = prepared;
@@ -345,6 +377,8 @@ function dressM2(prepared: PreparedM2, options: M2Options) {
 				unfogged: !!(material.flags & M2_MATERIAL_UNFOGGED),
 				opacity,
 				uvScroll: m2.uvScroll[b.uvAnimationIndex] ?? undefined,
+				...(options.secondTexture && b.textureCount > 1 ? secondTextureOf(m2, b.textureComboIndex + 1, b.uvAnimationIndex) : {}),
+				...(options.secondTexture ? { exactBlend: true as const, ...(b.colorIndex >= 0 && m2.colorKeys[b.colorIndex] ? { colorKeys: m2.colorKeys[b.colorIndex]! } : {}) } : {}),
 			},
 		});
 	});
@@ -358,7 +392,7 @@ export async function loadM2(storage: CascStorage, fdid: number, options: M2Opti
 	const animated = prepared.animation !== null;
 	// rest: where the part sits in the resting pose, for its particle emitters.
 	const parts: { prepared: PreparedM2; batches: ModelBatch[]; transform: Mat4 | null; rest: Mat4 | null; bone: number }[] = [
-		{ prepared, batches: dressM2(prepared, options), transform: null, rest: null, bone: -1 },
+		{ prepared, batches: dressM2(prepared, { ...options, secondTexture: SECOND_TEXTURE_MODELS.has(fdid) }), transform: null, rest: null, bone: -1 },
 	];
 	// Gear (helmets, shoulders, weapons) drawn at the body's attachment points.
 	for (const gear of options.attachments ?? []) {

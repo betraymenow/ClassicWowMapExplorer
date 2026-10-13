@@ -26,6 +26,12 @@ export interface M2Texture {
 	wrapY: boolean;
 }
 
+/** An animated colour: key times (ms, looping over the last) and RGB values (0-1, three per key). */
+export interface ColorKeys {
+	times: number[];
+	values: number[];
+}
+
 export interface M2File {
 	version: number;
 	/** The whole file and the offset of its MD20 header, for reading animation tracks. */
@@ -41,6 +47,8 @@ export interface M2File {
 	transparency: number[];
 	/** Static colour alpha per colour slot, 0-1. */
 	colorAlpha: number[];
+	/** Each colour slot's RGB keys over the first animation (times in ms), or null with none. */
+	colorKeys: (ColorKeys | null)[];
 	/** Per texture-transform combo: steady UV scroll in texture units per second (scrolling fire, water). */
 	uvScroll: ([number, number] | null)[];
 	skinFdids: number[];
@@ -162,6 +170,19 @@ export function parseM2(bytes: Uint8Array): M2File {
 	// Colours: M2Color = color track (vec3) + alpha track (fixed16), 40 bytes.
 	const colorAlpha = Array.from({ length: colors.count }, (_, i) =>
 		firstTrackValue(view, b, colors.offset + i * 40 + 20, (at) => view.getInt16(at, true) / 32767) ?? 1);
+	const colorKeys = Array.from({ length: colors.count }, (_, i): ColorKeys | null => {
+		const track = colors.offset + i * 40;
+		const timeLists = arr(view, b, track + 4);
+		const valueLists = arr(view, b, track + 12);
+		if (!timeLists.count || !valueLists.count) return null;
+		const t = arr(view, b, timeLists.offset);
+		const v = arr(view, b, valueLists.offset);
+		const n = Math.min(t.count, v.count, 8);
+		if (!n) return null;
+		const times = Array.from({ length: n }, (_, k) => view.getUint32(b + t.offset + k * 4, true));
+		const values = Array.from({ length: n * 3 }, (_, k) => view.getFloat32(b + v.offset + k * 4, true));
+		return { times, values };
+	});
 
 	return {
 		version,
@@ -174,6 +195,7 @@ export function parseM2(bytes: Uint8Array): M2File {
 		textureCombos: combos,
 		transparency,
 		colorAlpha,
+		colorKeys,
 		uvScroll,
 		skinFdids: skinFdids.slice(0, Math.max(1, skinCount)),
 		bounds: { min: [f(0xa0), f(0xa4), f(0xa8)], max: [f(0xac), f(0xb0), f(0xb4)], radius: f(0xb8) },

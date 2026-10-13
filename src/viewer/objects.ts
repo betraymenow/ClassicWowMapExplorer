@@ -3,7 +3,7 @@ import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import type { ModelData, ObjectKind, Placement } from '../explorer/objects';
 import type { SpawnInfo } from '../explorer/spawns';
 import type { AsyncStorageApi } from '../worker/protocol';
-import { createModelMaterial, createSkinnedDepthMaterial, tintModel, type SkinUniforms } from './modelMaterials';
+import { createModelMaterial, createSkinnedDepthMaterial, type SkinUniforms } from './modelMaterials';
 import { applyWalkable } from './walkable';
 import { Mover, type GroundAt } from './movers';
 import { perf } from './perf';
@@ -519,7 +519,7 @@ export class ObjectManager {
 			entry.state = 'failed';
 			return;
 		}
-		entry.textures = [...new Set([...data.batches.map((b) => b.material.texture), ...(data.emitters ?? []).map((e) => e.texture)].filter((t) => t))];
+		entry.textures = [...new Set([...data.batches.flatMap((b) => [b.material.texture, b.material.texture2 ?? 0]), ...(data.emitters ?? []).map((e) => e.texture)].filter((t) => t))];
 		const textures = await this.textures.acquire(entry.textures);
 		entry.emitters = (data.emitters ?? []).flatMap((def) => {
 			const texture = textures.get(def.texture);
@@ -552,12 +552,11 @@ export class ObjectManager {
 		entry.footstep = data.footstep ?? 0;
 		entry.materials = batches.map((b, i) => {
 			geometry.addGroup(b.start, b.count, i);
-			const material = createModelMaterial(b.material, textures.get(b.material.texture) ?? null, !!data.baked, skin);
+			const material = createModelMaterial(b.material, textures.get(b.material.texture) ?? null, !!data.baked, skin, b.material.texture2 ? textures.get(b.material.texture2) ?? null : null);
 			// Buildings are what the camera collides with (see sweep); doodads aren't solid.
 			if (entry.kind === 'wmo') applyWalkable(material);
 			return material;
 		});
-		tintModel(data.fdid, entry.materials);
 		geometry.computeBoundingSphere();
 		if (data.bvh) {
 			geometry.boundsTree = MeshBVH.deserialize({ ...data.bvh, index: data.indices } as Parameters<typeof MeshBVH.deserialize>[0], geometry, { setIndex: false });

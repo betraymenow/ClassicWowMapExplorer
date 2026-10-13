@@ -6,7 +6,7 @@ import { TILE_SIZE } from '../formats/adt';
 import { DAY } from './lighting';
 import { SWORD_OF_SARGERAS } from '../explorer/maps';
 import { RETAIL } from '../edition';
-import { createModelMaterial, tintModel } from './modelMaterials';
+import { createModelMaterial } from './modelMaterials';
 import { createTexture } from './textures';
 
 /**
@@ -421,7 +421,7 @@ export class Globe {
 		const placement = (await this.storage.loadTileObjects(c.wdt, SWORD_OF_SARGERAS.tileX, SWORD_OF_SARGERAS.tileY)).find((p) => p.fdid === SWORD_OF_SARGERAS.fdid);
 		if (!placement) return;
 		const models = await this.storage.loadModels([{ fdid: placement.fdid, kind: placement.kind }, { fdid: SWORD_OF_SARGERAS.effects[0], kind: 'm2' }]);
-		const textureIds = [...new Set(models.flatMap((m) => m?.batches.map((b) => b.material.texture) ?? []).filter((t) => t))];
+		const textureIds = [...new Set(models.flatMap((m) => m?.batches.flatMap((b) => [b.material.texture, b.material.texture2 ?? 0]) ?? []).filter((t) => t))];
 		const textures = new Map<number, THREE.Texture>();
 		for (const { fdid, texture } of await this.storage.loadTextures(textureIds, false)) if (texture) textures.set(fdid, createTexture(texture, 8, true));
 		const meshes = models.flatMap((data) => {
@@ -434,9 +434,8 @@ export class Globe {
 			const batches = [...data.batches].sort((a, b) => a.order - b.order);
 			const materials = batches.map((b, i) => {
 				geometry.addGroup(b.start, b.count, i);
-				return createModelMaterial(b.material, textures.get(b.material.texture) ?? null, false);
+				return createModelMaterial(b.material, textures.get(b.material.texture) ?? null, false, null, b.material.texture2 ? textures.get(b.material.texture2) ?? null : null);
 			});
-			tintModel(data.fdid, materials);
 			return [new THREE.Mesh(geometry, materials)];
 		});
 		if (!meshes.length) return;
