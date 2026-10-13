@@ -70,6 +70,17 @@ const MAELSTROM_DEPTH = -300;
 const DEEPHOLM_ENTRY = 1150;
 const DEEPHOLM_CEILING = 1350;
 const DEEPHOLM_SHAFT = 900;
+/**
+ * Deepholm's own light is very dark and blue (it's underground): brightened this much (direct
+ * light, ambient, sky and fog), its colour drawn part way to a neutral grey of the same brightness.
+ */
+const DEEPHOLM_LIGHT = { direct: 2.3, ambient: 3.6, sky: 2.0, neutral: 0.4 };
+
+/** A light colour brightened by k and drawn `neutral` of the way to the grey of its own brightness. */
+function liftLight(c: THREE.Color, k: number, neutral: number): THREE.Color {
+	const grey = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
+	return c.lerp(new THREE.Color(grey, grey, grey), neutral).multiplyScalar(k);
+}
 /** WoW world coordinates are measured from the centre of the 64x64 tile grid. */
 const MAP_ORIGIN = 32 * TILE_SIZE;
 const SKY = new THREE.Color(0x9ec4e4);
@@ -386,6 +397,8 @@ export class Viewer {
 	private globe: Globe | null = null;
 	/** Each continent's land tiles (its own grid), for the planet's picture. */
 	private readonly landTiles = new Map<number, [number, number][]>();
+	/** Each continent's low-detail tiles, for the planet's mountains. */
+	private readonly farTiles = new Map<number, FarTile[]>();
 	private shadowFrame = 0;
 	/** 0-1: shadows fade out as the light passes from the sun to the moon at dusk and back at dawn. */
 	private shadowStrength = 1;
@@ -905,7 +918,10 @@ export class Viewer {
 			loaded.push({ map, tiles: await this.storage.loadFarTiles(map.wdt, map.wdl) });
 		}
 		this.continents = layoutContinents(loaded);
-		loaded.forEach(({ map, tiles }) => this.landTiles.set(map.mapId, tiles.filter((t) => t.hasAdt).map((t): [number, number] => [t.x, t.y])));
+		loaded.forEach(({ map, tiles }) => {
+			this.landTiles.set(map.mapId, tiles.filter((t) => t.hasAdt).map((t): [number, number] => [t.x, t.y]));
+			this.farTiles.set(map.mapId, tiles);
+		});
 		loaded.forEach(({ tiles }, i) => this.terrain.addContinent(this.continents[i], tiles));
 		onStatus('Placing dungeons and other maps');
 		await this.placeMaps();
@@ -1283,7 +1299,7 @@ export class Viewer {
 		if (!this.globe) {
 			// The surface only: Deepholm lies underground (see checkDeepholm).
 			const continents = this.continents.filter((c) => !c.instance && !KNOWN_MAPS.find((m) => m.mapId === c.mapId)?.underground);
-			this.globe = new Globe(this.canvas, this.storage, continents, (c) => this.landTiles.get(c.mapId) ?? []);
+			this.globe = new Globe(this.canvas, this.storage, continents, (c) => this.landTiles.get(c.mapId) ?? [], (c) => this.farTiles.get(c.mapId) ?? []);
 			// Back down so the place at the globe's centre is at the view's centre, seen from as
 			// high as the globe was (but under where the globe would take over again), looking
 			// north and down at it.
@@ -1735,7 +1751,7 @@ export class Viewer {
 					this.onChange('time');
 				}
 			}
-			this.globe.update(dt, this.timeOfDay());
+			this.globe.update(dt, this.timeOfDay(), this.timeRunning);
 			// Leaving by zooming in already put the camera back in the world; draw that from now on.
 			if (this.globe.active) {
 				this.globe.render(this.renderer);
@@ -2019,19 +2035,26 @@ export class Viewer {
 			this.shadowStrength = bySun ? THREE.MathUtils.smoothstep(sunDir.y, SUN_TO_MOON, SUN_TO_MOON + 0.12) : THREE.MathUtils.smoothstep(-sunDir.y, -SUN_TO_MOON, 0.1);
 			this.sun.shadow.intensity = SHADOW_INTENSITY * this.shadowStrength;
 			this.sun.position.copy(lightDir);
+			const lift = place.mapId === DEEPHOLM_MAP ? DEEPHOLM_LIGHT : null;
 			this.sun.color.copy(c.direct);
 			this.ambient.color.copy(c.ambient);
-			this.ambient.groundColor.copy(c.ambient).multiplyScalar(0.8);
+			if (lift) {
+				liftLight(this.sun.color, lift.direct, lift.neutral);
+				liftLight(this.ambient.color, lift.ambient, lift.neutral);
+			}
+			this.ambient.groundColor.copy(this.ambient.color).multiplyScalar(0.8);
 			this.sky.update(state, sunDir, this.camera.position);
+			if (lift) this.sky.brighten(lift.sky);
 			this.post.grading.set(state.grading);
 			const fog = this.fogLook;
 			fog.color.copy(c.skyFog);
-			fog.sunColor.copy(c.direct).multiplyScalar(this.shadowStrength);
+			if (lift) liftLight(fog.color, lift.sky, lift.neutral);
+			fog.sunColor.copy(this.sun.color).multiplyScalar(this.shadowStrength);
 			fog.sunDir.copy(lightDir);
 			// Gone from far above, where it would only veil the map.
 			fog.density = FOG_DENSITY * state.fogDensity * (1 - THREE.MathUtils.smoothstep(alt, 1500, 4000));
-			this.fog.color.copy(c.skyFog);
-			(this.scene.background as THREE.Color).copy(c.skyFog);
+			this.fog.color.copy(fog.color);
+			(this.scene.background as THREE.Color).copy(fog.color);
 			if (state.fogEnd > 0) {
 				fogFar = state.fogEnd;
 				fogNear = state.fogEnd * THREE.MathUtils.clamp(state.fogScaler, 0, 0.9);

@@ -217,6 +217,12 @@ export class Sky {
 		this.mesh.position.copy(camera);
 	}
 
+	/** Brightens every band of the sky (for a place whose own light is too dark). Call after update. */
+	brighten(k: number): void {
+		const u = this.uniforms;
+		for (const c of [u.uTop, u.uMiddle, u.uBand1, u.uBand2, u.uSmog, u.uFog]) c.value.multiplyScalar(k);
+	}
+
 	/** Clouds the sky over (weather): every band pulled towards one colour, the sun hidden as much. Call after update. */
 	overcast(color: THREE.Color, amount: number): void {
 		const u = this.uniforms;
