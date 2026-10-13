@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { TILE_CELLS, TILE_SIZE } from '../formats/adt';
 import { WDL_CELLS } from '../formats/wdl';
-import { KNOWN_MAPS } from '../explorer/maps';
+import { KNOWN_MAPS, SWORD_OF_SARGERAS } from '../explorer/maps';
+import { RETAIL } from '../edition';
 import { ALPHA_ATLAS_SIZE, type SplatGeometry } from '../explorer/splatMesh';
 import type { FarTile, NearTile } from '../explorer/world';
 import type { TerrainGeometry } from '../explorer/terrainMesh';
@@ -28,6 +29,12 @@ function nearLoadDistance(mapId: number): number {
 const MAX_NEAR_IN_FLIGHT = 3;
 /** Buildings show out to this distance; scattered doodads only on full-detail tiles. */
 const WMO_DISTANCE = 3000;
+/**
+ * Landmarks seen from far across the world, their tile's buildings shown from this far: the
+ * Sword of Sargeras in Silithus (thousands of yards tall).
+ */
+const LANDMARK_DISTANCE = 45000;
+const LANDMARK_TILES = new Set([`${SWORD_OF_SARGERAS.mapId}:${SWORD_OF_SARGERAS.tileX}_${SWORD_OF_SARGERAS.tileY}`]);
 const FAR_TEXTURE_SIZE = 128;
 const FAR_TEXTURE_BATCH = 32;
 
@@ -485,7 +492,8 @@ export class TerrainManager {
 			else if (t.hasAdt && !t.near && !t.nearLoading && !t.nearFailed && (t.distance < load || held)) wanted.push(t);
 			// Doodads wait for the detailed terrain so they sit on the right ground.
 			const detailed = t.hasAdt ? !!t.near : t.distance < load || held;
-			const level: ObjectLevel = detailed ? 'all' : t.distance < WMO_DISTANCE || held ? 'wmo' : 'none';
+			const landmark = RETAIL && LANDMARK_TILES.has(`${t.continent.mapId}:${t.x}_${t.y}`);
+			const level: ObjectLevel = detailed ? 'all' : t.distance < (landmark ? LANDMARK_DISTANCE : WMO_DISTANCE) || held ? 'wmo' : 'none';
 			if (level !== t.objectLevel) {
 				t.objectLevel = level;
 				const offset = new THREE.Vector3(t.continent.offsetX * TILE_SIZE, 0, t.continent.offsetY * TILE_SIZE);

@@ -34,6 +34,8 @@ export interface Placement {
 	nameSet?: number;
 	/** Set for creature and game object spawns (VMaNGOS data), for the info panel. */
 	spawn?: SpawnInfo;
+	/** Landmarks (the Sword of Sargeras' effects): shown from afar, like buildings, not only close up. */
+	landmark?: true;
 	/** Distinguishes looks that share a display ID, e.g. held weapons (main_off_shield). */
 	variant?: string;
 	/** Creatures that walk: their waypoints or wander radius. */

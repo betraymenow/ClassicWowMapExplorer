@@ -26,6 +26,22 @@ export const KNOWN_MAPS: { name: string; directory: string; mapId: number; wdt: 
 	] : []),
 ];
 
+/**
+ * Retail terrain swaps shown in place of their parent map's own tiles, by the parent's WDT: the
+ * game shows these to everyone now, the base map's tiles being from before the change.
+ * Silithus: The Wound (Map 1817, Battle for Azeroth): the crater and its azerite, and the Sword
+ * of Sargeras standing in it (a WMO, see SWORD_OF_SARGERAS).
+ */
+export const TERRAIN_SWAPS: Record<number, { wdt: number }[]> = RETAIL ? { 782779: [{ wdt: 1711065 }] } : {};
+
+/**
+ * The Sword of Sargeras: its WMO, and the map and tile whose objects place it (see TERRAIN_SWAPS).
+ * effects: M2s placed with it: the red energy wreathing it (7FX_SargerasSword_FX, a game object
+ * the map files leave out) and the smoke from the crater (7FX_SargerasSword_Smoke_FX, which the
+ * map files place, but only as a nearby doodad).
+ */
+export const SWORD_OF_SARGERAS = { fdid: 1668175, mapId: 1, tileX: 28, tileY: 43, effects: [1782994, 1822190] };
+
 export type FileAvailability = Record<TileFileKind, Partial<Record<FileStatus | 'none', number>>>;
 
 export interface MapSummary {
@@ -68,6 +84,12 @@ export class MapExplorer {
 		let wdt = this.wdts.get(fdid);
 		if (!wdt) {
 			wdt = parseWdt(await this.storage.readFile(fdid));
+			for (const swap of TERRAIN_SWAPS[fdid] ?? []) {
+				const tiles = parseWdt(await this.storage.readFile(swap.wdt)).tiles;
+				tiles.forEach((t, i) => {
+					if (t) wdt!.tiles[i] = t;
+				});
+			}
 			this.wdts.set(fdid, wdt);
 		}
 		return wdt;

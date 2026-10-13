@@ -11,7 +11,7 @@ import { MusicTables, type MusicData, type WmoArea } from './music';
 import type { MapExplorer } from './maps';
 import { loadWorldMaps, type WorldMapInfo } from './worldMap';
 import { loadPlaces, type Place } from './places';
-import { KNOWN_MAPS } from './maps';
+import { KNOWN_MAPS, SWORD_OF_SARGERAS, TERRAIN_SWAPS } from './maps';
 import { RETAIL } from '../edition';
 import { globalWmoPlacement, globalWmoTiles, loadM2, loadWmo, parsePlacements, type ModelData, type ObjectKind, type Placement } from './objects';
 import { GroundEffects, type ClutterSource } from './groundEffects';
@@ -185,6 +185,13 @@ export class WorldLoader {
 	async loadFarTiles(wdtFdid: number, wdlFdid: number): Promise<FarTile[]> {
 		const wdt = await this.maps.wdt(wdtFdid);
 		const wdl = wdlFdid ? parseWdl(await this.storage.readFile(wdlFdid)) : await this.farFromAdts(wdtFdid);
+		// Terrain swaps' tiles replace the base map's: their low-detail heights from their own ADTs.
+		for (const swap of TERRAIN_SWAPS[wdtFdid] ?? []) {
+			for (const t of await this.farFromAdts(swap.wdt)) {
+				const i = wdl.findIndex((w) => w.x === t.x && w.y === t.y);
+				if (i >= 0) wdl[i] = t;
+			}
+		}
 		return wdl.map((t) => ({
 			x: t.x,
 			y: t.y,
@@ -290,9 +297,25 @@ export class WorldLoader {
 		// A WMO-only map's building is listed by every tile it covers (placed once, by its key).
 		const global = wdt.globalWmo;
 		if (global && globalWmoTiles(global).some(([tx, ty]) => tx === x && ty === y)) placements.push(globalWmoPlacement(global));
+		this.addSwordEffects(placements, wdtFdid, x, y);
 		// Spawn placements are cached per tile; send copies of their matrices, since the
 		// transfer to the main thread empties the originals.
 		return placements.concat(spawns.map((p) => ({ ...p, matrix: p.matrix.slice() })), portals);
+	}
+
+	/**
+	 * The Sword of Sargeras' effects, placed with the sword on its tile as landmarks (see
+	 * SWORD_OF_SARGERAS); the map files' own nearby-only copy of the smoke is left out for it.
+	 */
+	private addSwordEffects(placements: Placement[], wdtFdid: number, x: number, y: number): void {
+		if (!RETAIL) return;
+		const effects = SWORD_OF_SARGERAS.effects;
+		for (let i = placements.length - 1; i >= 0; i--) if (placements[i].kind === 'm2' && effects.includes(placements[i].fdid)) placements.splice(i, 1);
+		const kalimdor = KNOWN_MAPS.find((m) => m.mapId === SWORD_OF_SARGERAS.mapId);
+		if (wdtFdid !== kalimdor?.wdt || x !== SWORD_OF_SARGERAS.tileX || y !== SWORD_OF_SARGERAS.tileY) return;
+		const sword = placements.find((p) => p.kind === 'wmo' && p.fdid === SWORD_OF_SARGERAS.fdid);
+		if (!sword) return;
+		effects.forEach((fdid, i) => placements.push({ kind: 'm2', fdid, uid: 0xfffe0000 + i, matrix: sword.matrix.slice(), doodadSet: 0, landmark: true }));
 	}
 
 	private portalSource: Promise<PortalSource> | null = null;

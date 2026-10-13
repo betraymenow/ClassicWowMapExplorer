@@ -3,7 +3,7 @@ import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh';
 import type { ModelData, ObjectKind, Placement } from '../explorer/objects';
 import type { SpawnInfo } from '../explorer/spawns';
 import type { AsyncStorageApi } from '../worker/protocol';
-import { createModelMaterial, createSkinnedDepthMaterial, type SkinUniforms } from './modelMaterials';
+import { createModelMaterial, createSkinnedDepthMaterial, tintModel, type SkinUniforms } from './modelMaterials';
 import { applyWalkable } from './walkable';
 import { Mover, type GroundAt } from './movers';
 import { perf } from './perf';
@@ -46,6 +46,8 @@ const MOVE_RANGE = 300;
 /** The nearest and furthest the detail distance can be set, as a multiple of the usual. */
 export const DETAIL_RANGE_MIN = 0.25;
 export const DETAIL_RANGE_MAX = 4;
+/** Models with a bounding radius over this (yards) are landmarks, seen from any distance. */
+const LANDMARK_RADIUS = 1500;
 
 /**
  * View distance for a doodad of a given (scaled) radius, like the game's doodad LOD: small props
@@ -54,6 +56,8 @@ export const DETAIL_RANGE_MAX = 4;
  * their size warrants. scale stretches or shrinks it all (the detail distance setting).
  */
 function viewDistance(radius: number, scale: number): number {
+	// Landmarks thousands of yards across (the Sword of Sargeras) show as far as the world does.
+	if (radius > LANDMARK_RADIUS) return Infinity;
 	return Math.max(THREE.MathUtils.clamp(radius * 80, 150, 1600), Math.min(radius * 30, 12000)) * scale;
 }
 
@@ -198,7 +202,7 @@ export class ObjectManager {
 		const wanted = new Map<string, Placement>();
 		if (tile.placements && tile.level !== 'none') {
 			for (const p of tile.placements) {
-				if (detail || p.kind === 'wmo') wanted.set(`${tile.wdt}:${p.kind}:${p.uid}`, p);
+				if (detail || p.kind === 'wmo' || p.landmark) wanted.set(`${tile.wdt}:${p.kind}:${p.uid}`, p);
 			}
 		}
 		for (const [key, p] of wanted) {
@@ -468,11 +472,13 @@ export class ObjectManager {
 		const range = this.showAll ? SHOT_PARTICLE_RANGE : PARTICLE_RANGE;
 		for (const [id, entry] of this.models) {
 			if (!entry.emitters.length || entry.state !== 'ready') continue;
+			// A huge effect's particles (the Sword of Sargeras' smoke) show from as far as its size.
+			const reach = range + (entry.radius > 300 ? entry.radius * 8 : 0);
 			for (const key of entry.visible) {
 				const m = entry.instances.get(key);
 				if (!m) continue;
 				const e = m.elements;
-				if ((e[12] - this.camera.x) ** 2 + (e[13] - this.camera.y) ** 2 + (e[14] - this.camera.z) ** 2 > range ** 2) continue;
+				if ((e[12] - this.camera.x) ** 2 + (e[13] - this.camera.y) ** 2 + (e[14] - this.camera.z) ** 2 > reach ** 2) continue;
 				out.push({ key: `${id}|${key}`, matrix: m, emitters: entry.emitters });
 			}
 		}
@@ -551,6 +557,7 @@ export class ObjectManager {
 			if (entry.kind === 'wmo') applyWalkable(material);
 			return material;
 		});
+		tintModel(data.fdid, entry.materials);
 		geometry.computeBoundingSphere();
 		if (data.bvh) {
 			geometry.boundsTree = MeshBVH.deserialize({ ...data.bvh, index: data.indices } as Parameters<typeof MeshBVH.deserialize>[0], geometry, { setIndex: false });

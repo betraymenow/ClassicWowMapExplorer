@@ -5,6 +5,19 @@ import { Blend } from '../formats/m2';
 import { setNoShadow } from './shadows';
 import { applyTerrainShadow } from './terrainShadow';
 
+/**
+ * Colours for models whose look comes from their colour animations, which aren't read: drawn
+ * white without them. The Sword of Sargeras' energy is red in the game.
+ */
+const MODEL_TINTS = new Map<number, number>([[1782994, 0xff2a12]]);
+
+/** Tints a model's materials as MODEL_TINTS says (by the model's file ID); no change for others. */
+export function tintModel(fdid: number, materials: THREE.Material[]): void {
+	const tint = MODEL_TINTS.get(fdid);
+	if (tint === undefined) return;
+	for (const m of materials) if ('color' in m && m.color instanceof THREE.Color) m.color.multiply(new THREE.Color(tint));
+}
+
 /** Shared uniforms for a skinned model: its bone texture and loop. */
 export interface SkinUniforms {
 	uBoneTex: THREE.IUniform<THREE.Texture>;

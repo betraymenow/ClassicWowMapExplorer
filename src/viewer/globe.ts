@@ -4,6 +4,10 @@ import type { FarTile } from '../explorer/world';
 import type { ContinentPlacement } from './terrain';
 import { TILE_SIZE } from '../formats/adt';
 import { DAY } from './lighting';
+import { SWORD_OF_SARGERAS } from '../explorer/maps';
+import { RETAIL } from '../edition';
+import { createModelMaterial, tintModel } from './modelMaterials';
+import { createTexture } from './textures';
 
 /**
  * Azeroth as a planet, seen as from space: the continents coloured as the land would look
@@ -45,6 +49,12 @@ const MAELSTROM_MAP = 730;
  * clock's own speed-up (a whole day in seconds), at which they would only flicker round.
  */
 const CLOUDS_FAST = 40;
+/**
+ * The Sword of Sargeras on the planet: this many times its true size with the whole planet in
+ * view, so it reads as the landmark it is, shrinking to true size as the camera comes down (so
+ * it matches the flat world's when going down).
+ */
+const SWORD_BOOST = 1.6;
 /** The Maelstrom's storm: its radius (radians round the globe). */
 const STORM_RADIUS = 0.15;
 
@@ -74,6 +84,9 @@ export class Globe {
 	private readonly surface: THREE.Mesh;
 	private readonly halo: THREE.Mesh;
 	private readonly sunGlow: THREE.Sprite;
+	/** Lights for the models standing on the planet (the surface and clouds light themselves). */
+	private readonly sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
+	private readonly sword = new THREE.Group();
 	private readonly landCanvas = document.createElement('canvas');
 	private readonly landTexture: THREE.CanvasTexture;
 	private readonly biomeCanvas = document.createElement('canvas');
@@ -161,7 +174,9 @@ export class Globe {
 		this.planet.add(this.surface);
 		this.planet.add(new THREE.Mesh(new THREE.SphereGeometry(1.008, 192, 96), cloudMaterial(this.shared)));
 		this.halo = atmosphereHalo();
-		this.scene.add(this.planet, this.halo, nebula(), stars());
+		this.scene.add(this.planet, this.halo, nebula(), stars(), this.sun, new THREE.AmbientLight(0x6070a0, 0.35));
+		this.planet.add(this.sword);
+		if (RETAIL) void this.buildSword();
 
 		this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('255,248,230', 0.16), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
 		this.scene.add(this.sunGlow);
@@ -255,6 +270,8 @@ export class Globe {
 		this.shared.cloudTime.value = this.cloudClock;
 		(this.halo.material as THREE.ShaderMaterial).uniforms.sunDir.value.copy(sunDir);
 		// Far off, so the planet hides it when the sun is behind; the glare peeks round the rim.
+		this.sun.position.copy(sunDir);
+		this.sword.scale.setScalar(1 + (SWORD_BOOST - 1) * THREE.MathUtils.smoothstep(this.dist, DIST_EXIT, DIST_START));
 		this.sunGlow.position.copy(sunDir).multiplyScalar(40);
 		this.sunGlow.scale.setScalar(26);
 	}
@@ -390,6 +407,60 @@ export class Globe {
 		}
 		ctx.putImageData(img, 0, 0);
 		this.coastTexture.needsUpdate = true;
+	}
+
+	/**
+	 * The Sword of Sargeras, placed as on the flat world (the same WMO, from its tile's objects,
+	 * and its red energy, the first of its effects; the smoke's particles are left to the flat
+	 * world): its placement turned from continent space (x east, y up, z south, in yards) into
+	 * the planet's, standing on the ground there.
+	 */
+	private async buildSword(): Promise<void> {
+		const c = this.continents.find((c) => c.mapId === SWORD_OF_SARGERAS.mapId);
+		if (!c) return;
+		const placement = (await this.storage.loadTileObjects(c.wdt, SWORD_OF_SARGERAS.tileX, SWORD_OF_SARGERAS.tileY)).find((p) => p.fdid === SWORD_OF_SARGERAS.fdid);
+		if (!placement) return;
+		const models = await this.storage.loadModels([{ fdid: placement.fdid, kind: placement.kind }, { fdid: SWORD_OF_SARGERAS.effects[0], kind: 'm2' }]);
+		const textureIds = [...new Set(models.flatMap((m) => m?.batches.map((b) => b.material.texture) ?? []).filter((t) => t))];
+		const textures = new Map<number, THREE.Texture>();
+		for (const { fdid, texture } of await this.storage.loadTextures(textureIds, false)) if (texture) textures.set(fdid, createTexture(texture, 8, true));
+		const meshes = models.flatMap((data) => {
+			if (!data) return [];
+			const geometry = new THREE.BufferGeometry();
+			geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+			geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
+			geometry.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
+			geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
+			const batches = [...data.batches].sort((a, b) => a.order - b.order);
+			const materials = batches.map((b, i) => {
+				geometry.addGroup(b.start, b.count, i);
+				return createModelMaterial(b.material, textures.get(b.material.texture) ?? null, false);
+			});
+			tintModel(data.fdid, materials);
+			return [new THREE.Mesh(geometry, materials)];
+		});
+		if (!meshes.length) return;
+
+		// Where it stands, on the grid, and the ground's east, up and south there.
+		const local = new THREE.Matrix4().fromArray(placement.matrix);
+		const origin = new THREE.Vector3().setFromMatrixPosition(local);
+		const tileX = origin.x / TILE_SIZE + c.offsetX;
+		const tileY = origin.z / TILE_SIZE + c.offsetY;
+		const up = this.dirOf(tileX, tileY);
+		const east = this.dirOf(tileX + 0.01, tileY).sub(this.dirOf(tileX - 0.01, tileY)).normalize();
+		const south = this.dirOf(tileX, tileY + 0.01).sub(this.dirOf(tileX, tileY - 0.01)).normalize();
+		const k = 1 / this.radiusYards;
+		const toPlanet = new THREE.Matrix4()
+			.makeBasis(east, up, south)
+			.multiply(new THREE.Matrix4().makeScale(k, k, k))
+			.multiply(new THREE.Matrix4().makeTranslation(-origin.x, 0, -origin.z))
+			.multiply(local);
+		for (const mesh of meshes) {
+			mesh.matrixAutoUpdate = false;
+			mesh.matrix.copy(toPlanet);
+			this.sword.add(mesh);
+		}
+		this.sword.position.copy(up);
 	}
 
 	/** The Maelstrom's eye, in the world's tile grid: on its own map where it's laid out, else between the continents. */
