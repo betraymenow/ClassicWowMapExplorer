@@ -127,11 +127,12 @@ const FAR_PAST_FOG = 1.1;
 /** Yards; the far plane never comes closer than this, so the sky dome (1000 yd around the camera) always shows. */
 const MIN_FAR = 1500;
 /**
- * Music for the planet view, instead of the zone music: an MP3 of the person's own placed at
+ * Music for the planet view (retail only; classic keeps the zone music), instead of the zone
+ * music: an MP3 of the person's own placed at
  * public/music/planet.mp3 (not in the repository, since it's the game's music). Without the
  * file the planet is just quiet.
  */
-const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Antoran Wastes' };
+const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Krokuun' };
 
 /** Climbing above this height (yards over the ground) shows Azeroth as a planet (see Globe). */
 const GLOBE_ENTER_ALTITUDE = 40000;
@@ -1326,7 +1327,7 @@ export class Viewer {
 		// The world below keeps its camera; the keys and mouse are the planet's.
 		this.controls.enabled = false;
 		document.documentElement.classList.add('globe-view');
-		this.music?.setOwnTrack(PLANET_MUSIC);
+		if (RETAIL) this.music?.setOwnTrack(PLANET_MUSIC);
 	}
 
 	/**

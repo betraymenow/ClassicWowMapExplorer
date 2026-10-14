@@ -116,6 +116,10 @@ export class Globe {
 	private painting: Promise<void> | null = null;
 	/** The clouds' own clock (seconds): real time, run faster or backwards along with the time of day. */
 	private cloudClock = 0;
+	/** The sun's direction in space (world), fixed while the planet is turned; null to place it from the time of day. */
+	private sunWorld: THREE.Vector3 | null = null;
+	/** The time of day the sun was last placed for (half-minutes). */
+	private sunTime = 0;
 	/** The view: which point of the world's grid faces the camera, and how far off it is. */
 	private view = { x: 0, y: 0 };
 	private dist = DIST_START;
@@ -253,6 +257,8 @@ export class Globe {
 		this.dist = THREE.MathUtils.clamp(this.distanceFor(height), DIST_MIN, DIST_MAX);
 		this.targetDist = Math.max(this.dist, DIST_START);
 		this.active = true;
+		// The sun is placed afresh from the time of day (see update).
+		this.sunWorld = null;
 		this.painting ??= this.paintWorld();
 	}
 
@@ -307,10 +313,20 @@ export class Globe {
 		this.camera.position.set(0, 0, this.dist);
 		this.camera.lookAt(0, 0, 0);
 
-		// The sun over the world's centre at noon, going round with the time of day, a little north.
-		const sunPhi = Math.PI / 2 + Math.PI - (timeOfDay / DAY) * Math.PI * 2;
-		const sunObj = directionOf(sunPhi, Math.PI * 0.4);
-		const sunDir = sunObj.clone().applyQuaternion(this.planet.quaternion);
+		// The sun stands still in space while the planet is turned by hand, so day and night move
+		// across it. It starts where the time of day puts it (over the world's centre at noon, a
+		// little north) and goes round the planet's axis as time runs on.
+		if (!this.sunWorld) {
+			const sunPhi = Math.PI / 2 + Math.PI - (timeOfDay / DAY) * Math.PI * 2;
+			this.sunWorld = directionOf(sunPhi, Math.PI * 0.4).applyQuaternion(this.planet.quaternion);
+		} else if (timeOfDay !== this.sunTime) {
+			const passed = THREE.MathUtils.euclideanModulo(timeOfDay - this.sunTime + DAY / 2, DAY) - DAY / 2;
+			const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(this.planet.quaternion);
+			this.sunWorld.applyAxisAngle(axis, (-passed / DAY) * Math.PI * 2);
+		}
+		this.sunTime = timeOfDay;
+		const sunDir = this.sunWorld.clone();
+		const sunObj = sunDir.clone().applyQuaternion(this.planet.quaternion.clone().invert());
 		this.shared.sunObj.value.copy(sunObj);
 		this.shared.camObj.value.copy(this.camera.position).applyQuaternion(this.planet.quaternion.clone().invert());
 		this.cloudClock = (this.cloudClock + dt * (timeRunning ? timeRunning * CLOUDS_FAST : 1)) % 100000;
