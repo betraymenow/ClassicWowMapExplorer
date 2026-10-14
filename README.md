@@ -336,6 +336,14 @@ WOW_DIR="D:/Games/World of Warcraft" npm run dev
 - 가장자리에 붙은 푸른 대기 빛, 보랏빛 성운과 별이 있는 우주 배경, 시간대에 따라 움직이는 해와 낮·밤 경계를 그립니다.
 - 행성 보기 동안에는 이름표·지역 이름 같은 지상 표시를 숨깁니다.
 
+**행성 보기 음악** (직접 넣는 MP3)
+
+- 행성 보기로 바뀌면 지역 음악이 서서히 줄고 **행성 전용 음악**이 반복 재생됩니다. 평면 지도로 내려오면 원래 지역 음악으로 돌아갑니다. 지상 환경음(바람 소리 등)도 행성 보기 동안은 꺼집니다.
+- 들어갈 때마다 곡의 **임의 지점**에서 시작해 서서히 커집니다.
+- 볼륨은 지역 음악의 **60%**입니다(`music.ts`의 `OWN_TRACK_VOLUME`). 음악 켜기/끄기(**M**)와 사운드 패널의 음악 음량을 그대로 따릅니다.
+- 음악 파일은 저장소에 **들어 있지 않습니다**(게임 음악이라 공개하지 않음, `.gitignore`에 포함). 직접 MP3를 **`public/music/planet.mp3`**에 두고 빌드하면 됩니다. 이미 빌드된 앱이라면 `app/music/planet.mp3`와 `app/retail/music/planet.mp3`에 넣어도 되지만, 다음 빌드 때 덮어써집니다. 파일이 없으면 행성 보기는 조용합니다.
+- HUD의 음악 칸에 곡 이름(지금은 "Antoran Wastes", `viewer.ts`의 `PLANET_MUSIC`)이 표시됩니다.
+
 **평면 지도와 위치 맞추기**
 
 - 들어갈 때와 나올 때 모두, **화면 가운데 지점**과 **확대 정도**가 이어지도록 맞춥니다. 예를 들어 소용돌이를 화면 가운데 두고 O를 누르면 행성에서도 소용돌이가 정중앙에 오고, 다시 내려오면 소용돌이가 화면 가운데에 옵니다.
@@ -511,8 +519,9 @@ A. `app\retail\` 폴더가 있는지 확인하세요. 개발 서버(`npm run dev
 | `src/explorer/objects.ts` | 멀리서도 보이는 배치 표시 `landmark`. 검 효과 모델(`SECOND_TEXTURE_MODELS`)의 두 번째 텍스처·스크롤(`texture2`), 색 애니메이션(`colorKeys`), 게임과 같은 섞기(`exactBlend`)를 재질에 넘김 |
 | `src/formats/m2.ts` | 색 트랙의 첫 애니메이션 키(`colorKeys`) 읽기 |
 | `src/explorer/world.ts` | 리테일에서 대륙 외의 맵(던전 등)을 불러오지 않음. WDL이 없는 맵은 ADT 높이로 원거리 지형을 만듦(`farFromAdts`). 지형 교체 타일의 원거리 높이도 그 ADT에서 만듦. 검 타일에 붉은 기운·연기 효과를 랜드마크로 추가(`addSwordEffects`). 구운 지도 텍스처가 없는 타일은 미니맵 이미지로 대신함(`farTextureOf`) |
-| `src/viewer/viewer.ts` | 지금 시점의 해시를 바로 얻는 `viewHash()`. 세 번째 대륙을 두 대륙 남쪽 바다 가운데에 배치. 단축키 변경(T·Y·H 등, X 그림자 키 제거). 클릭으로 마우스를 잡지 않고, NPC·오브젝트 클릭만 정보창을 엶. 바다·호수·강 속을 물 밖과 같은 하늘·안개·조명으로 그림(용암·독액만 원작 표현). 행성 보기 연결(O 키, 40,000야드 자동 전환, `viewCenter`, 시간 흐름 전달). 심원의 영지만 조명 밝히기(`DEEPHOLM_LIGHT`, `liftLight`). 소용돌이·심원의 영지 배치(`layoutContinents`)와 눈↔대지의 사원 장면 전환(`checkDeepholm`, `passageFlash`), 소용돌이 눈 안 바닥 없음 |
+| `src/viewer/viewer.ts` | 지금 시점의 해시를 바로 얻는 `viewHash()`. 세 번째 대륙을 두 대륙 남쪽 바다 가운데에 배치. 단축키 변경(T·Y·H 등, X 그림자 키 제거). 클릭으로 마우스를 잡지 않고, NPC·오브젝트 클릭만 정보창을 엶. 바다·호수·강 속을 물 밖과 같은 하늘·안개·조명으로 그림(용암·독액만 원작 표현). 행성 보기 연결(O 키, 40,000야드 자동 전환, `viewCenter`, 시간 흐름 전달, 행성 보기 중에도 음악·HUD 갱신). 행성 전용 음악(`PLANET_MUSIC`, `public/music/planet.mp3`). 심원의 영지만 조명 밝히기(`DEEPHOLM_LIGHT`, `liftLight`). 소용돌이·심원의 영지 배치(`layoutContinents`)와 눈↔대지의 사원 장면 전환(`checkDeepholm`, `passageFlash`), 소용돌이 눈 안 바닥 없음 |
 | `src/viewer/objects.ts` | 리테일에서 NPC·영혼의 치유사를 항상 숨김. 반경 100야드 넘는 거대 모델은 크기에 비례해 최대 12,000야드까지, 1,500야드 넘는 랜드마크는 거리 제한 없이 보임(`viewDistance`). 랜드마크 배치는 원거리에서도 표시, 큰 모델의 파티클은 크기에 비례해 멀리서도 표시 |
+| `src/viewer/music.ts` | 직접 넣은 곡을 지역 음악 대신 반복 재생(`setOwnTrack`): 임의 지점에서 시작, 60% 볼륨(`OWN_TRACK_VOLUME`) |
 | `src/viewer/modelMaterials.ts` | 두 번째 텍스처 곱하기(Mod2x), 색 애니메이션 재생(`colorAt`), `exactBlend`인 BlendAdd를 premultiplied alpha(ONE, ONE_MINUS_SRC_ALPHA)로 섞기 |
 | `src/viewer/globe.ts` | **행성 보기** (새 파일): 세계 격자를 가운데부터 펼쳐 씌운 구(방위 정거 투영, 지도 북쪽이 위). 미니맵 색을 자연색으로 바꾼 대륙(`paintBiome`, `naturalColour`), 높이 음영과 바위. GPU 셰이더 구름(`CLOUDS_GLSL`: 동쪽으로 흐르는 일반 구름, 고정된 소용돌이 회오리, 땅 그림자, Y와 연동하는 `cloudClock`). 바다·해빙·대기·별·해, 살게라스의 검(`buildSword`, `SWORD_BOOST`), 드래그·휠·더블클릭 조작, 평면 지도와 화면 중심·높이 맞추기 |
 | `src/viewer/terrain.ts` | 맵별 상세 지형 거리(`detailDistance`). 랜드마크 타일(살게라스의 검)의 건물을 45,000야드까지 표시(`LANDMARK_TILES`) |
