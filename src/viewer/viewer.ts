@@ -134,6 +134,14 @@ const MIN_FAR = 1500;
  */
 const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Argus' };
 
+/**
+ * Where retail opens when the URL gives no view (a fresh start from the launcher), and where T
+ * goes: high over the Maelstrom looking straight down, above the planet view's height, so it
+ * opens on the planet. As a URL hash (see viewFromHash). Classic's is the same over the sea where
+ * the Maelstrom lies (see planetStart).
+ */
+const RETAIL_START_VIEW = '#3/30.496/31.117/40550/359/-89';
+
 /** Climbing above this height (yards over the ground) shows Azeroth as a planet (see Globe). */
 const GLOBE_ENTER_ALTITUDE = 40000;
 /** Height (yards) the camera comes back down to from the planet: well under where it would switch again. */
@@ -974,6 +982,8 @@ export class Viewer {
 				this.underwaterAudio = new UnderwaterAudio(this.music);
 				this.backgroundAudio = new BackgroundAudio(this.music);
 				this.weather.setMusic(this.music);
+				// Opened on the planet (see RETAIL_START_VIEW) before the music was ready: its music now.
+				if (RETAIL && this.globe?.active) this.music.setOwnTrack(PLANET_MUSIC);
 				const music = this.music;
 				this.storage.loadFootsteps().then((sounds) => this.setUpFootsteps(new Footsteps(music, sounds)), (e) => console.warn('Footstep sounds unavailable:', e));
 			},
@@ -987,7 +997,7 @@ export class Viewer {
 		// A view inside a dungeon needs that dungeon laid out first.
 		const hashInstance = HASH_INSTANCE.exec(location.hash);
 		if (hashInstance) await this.placementFor(Number(hashInstance[1]));
-		const view = this.viewFromHash();
+		const view = this.viewFromHash() ?? (RETAIL ? this.planetStart() : null);
 		if (view) this.controls.set(view.position, view.yaw, view.pitch);
 		else this.goToStart();
 		window.addEventListener('pagehide', () => this.writeHash(performance.now(), true));
@@ -1020,8 +1030,8 @@ export class Viewer {
 	 * (tiles fractional, angles in degrees), so views can be bookmarked and shared. Inside a
 	 * dungeon the first part is d<map ID> instead.
 	 */
-	private viewFromHash(): { position: THREE.Vector3; yaw: number; pitch: number } | null {
-		const [first = '', ...rest] = location.hash.slice(1).split('/');
+	private viewFromHash(hash = location.hash): { position: THREE.Vector3; yaw: number; pitch: number } | null {
+		const [first = '', ...rest] = hash.slice(1).split('/');
 		const parts = rest.map(Number);
 		if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return null;
 		const [tx, ty, alt = 150, yaw = 0, pitch = -17] = parts;
@@ -1295,6 +1305,68 @@ export class Viewer {
 		this.controls.flyTo(new THREE.Vector3(center.x, Math.max(fitHeight, fitWidth) * 1.05, center.y), 0, -Math.PI / 2 + 0.001, 2.5);
 	}
 
+	/**
+	 * The planet view's starting point (T's, and where retail opens): RETAIL_START_VIEW over the
+	 * Maelstrom; in classic, which has no Maelstrom, the same height and view over the sea
+	 * between Kalimdor and the Eastern Kingdoms where it lies (as the planet places its storm).
+	 */
+	private planetStart(): { position: THREE.Vector3; yaw: number; pitch: number } {
+		const retail = RETAIL ? this.viewFromHash(RETAIL_START_VIEW) : null;
+		if (retail) return retail;
+		const [, , , height, yaw, pitch] = RETAIL_START_VIEW.slice(1).split('/').map(Number);
+		const extent = (c: ContinentPlacement) => {
+			const tiles = this.landTiles.get(c.mapId) ?? [];
+			const xs = tiles.map((t) => t[0] + c.offsetX);
+			const ys = tiles.map((t) => t[1] + c.offsetY);
+			return { minX: Math.min(...xs), maxX: Math.max(...xs) + 1, minY: Math.min(...ys), maxY: Math.max(...ys) + 1 };
+		};
+		const [west, east] = [extent(this.continents[1]), extent(this.continents[0])].sort((a, b) => a.minX - b.minX);
+		const x = ((west.maxX + east.minX) / 2) * TILE_SIZE;
+		const z = ((west.minY + west.maxY + east.minY + east.maxY) / 4) * TILE_SIZE;
+		return { position: new THREE.Vector3(x, Math.max(0, this.terrain.heightAt(x, z)) + height, z), yaw: THREE.MathUtils.degToRad(yaw), pitch: THREE.MathUtils.degToRad(pitch) };
+	}
+
+	/** T: to the planet view's starting point; flown up to from the world (the planet takes over up there), at once on the planet. */
+	private goToPlanetStart(): void {
+		const view = this.planetStart();
+		if (this.globe?.active) this.showPlanet(view);
+		else this.controls.flyTo(view.position, view.yaw, view.pitch, 2.5);
+	}
+
+	/**
+	 * The planet view centred on a view (as a URL hash), or its starting point without one (or
+	 * where the hash can't be placed): for arriving from the other edition in the planet view.
+	 */
+	showPlanetAt(hash: string): void {
+		this.showPlanet((hash ? this.viewFromHash(hash) : null) ?? this.planetStart());
+	}
+
+	private showPlanet(view: { position: THREE.Vector3; yaw: number; pitch: number }): void {
+		this.controls.set(view.position, view.yaw, view.pitch);
+		if (!this.globe?.active) {
+			this.enterGlobe();
+			return;
+		}
+		// Already on the planet: turned to the new place, its music playing on.
+		const center = this.viewCenter();
+		this.globe.enter(center.x / TILE_SIZE, center.z / TILE_SIZE, center.height);
+	}
+
+	/**
+	 * On the planet, its centre for the other edition to open on (see setUpEdition): as a URL hash
+	 * over the Eastern Kingdoms or Kalimdor, which both have; '' elsewhere (the other opens at its
+	 * planet start); null off the planet.
+	 */
+	planetHandoff(): string | null {
+		if (!this.globe?.active) return null;
+		const c = this.globe.centre;
+		const at = this.terrain.locate(c.tileX * TILE_SIZE, c.tileY * TILE_SIZE);
+		const index = at && !at.continent.instance ? this.continents.indexOf(at.continent) : -1;
+		if (index !== 0 && index !== 1) return '';
+		const continent = this.continents[index];
+		return `#${index}/${(c.tileX - continent.offsetX).toFixed(3)}/${(c.tileY - continent.offsetY).toFixed(3)}/${Math.round(c.height)}/0/-89`;
+	}
+
 	/** Whether Azeroth is being shown as a planet. */
 	get globeShown(): boolean {
 		return this.globe?.active ?? false;
@@ -1417,7 +1489,7 @@ export class Viewer {
 			else this.startShot();
 		} else if (e.code === 'Escape' && this.shot) this.endShot();
 		else if (e.code === 'KeyO') this.toggleGlobe();
-		else if (e.code === 'KeyT') this.controls.flyTo(this.startPosition(), 0, -0.3, 2.5);
+		else if (e.code === 'KeyT') this.goToPlanetStart();
 		else if (e.code.startsWith('Digit')) this.goToContinent(Number(e.code.slice(5)) - 1);
 		else if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
 			const problem = this.setWalking(!this.walker.active);

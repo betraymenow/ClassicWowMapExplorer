@@ -53,6 +53,9 @@ const MAELSTROM_MAP = 730;
  * clock's own speed-up (a whole day in seconds), at which they would only flicker round.
  */
 const CLOUDS_FAST = 40;
+/** How fast the planet turns on its axis (radians a second): as fast as the clouds drift (see CLOUDS_GLSL's turn). */
+const SPIN_RATE = 0.008;
+const POLE_AXIS = new THREE.Vector3(0, 1, 0);
 /**
  * The Sword of Sargeras on the planet: this many times its true size with the whole planet in
  * view, so it reads as the landmark it is, shrinking to true size as the camera comes down (so
@@ -116,6 +119,8 @@ export class Globe {
 	private painting: Promise<void> | null = null;
 	/** The clouds' own clock (seconds): real time, run faster or backwards along with the time of day. */
 	private cloudClock = 0;
+	/** How far the planet has turned on its axis since it was entered (eastward, like the clouds). */
+	private spin = 0;
 	/** The sun's direction in space (world), fixed while the planet is turned; null to place it from the time of day. */
 	private sunWorld: THREE.Vector3 | null = null;
 	/** The time of day the sun was last placed for (half-minutes). */
@@ -255,6 +260,7 @@ export class Globe {
 	 */
 	enter(tileX: number, tileY: number, height: number): void {
 		this.moveView(tileX, tileY);
+		this.spin = 0;
 		this.dist = THREE.MathUtils.clamp(this.distanceFor(height), DIST_MIN, DIST_MAX);
 		this.targetDist = Math.max(this.dist, DIST_START);
 		this.active = true;
@@ -278,9 +284,21 @@ export class Globe {
 		return (this.dist - 1) * this.radiusYards;
 	}
 
+	/** Where the view is centred (the world's tile grid) and how high it's seen from. */
+	get centre(): GlobeExit {
+		const at = this.facing();
+		return { tileX: at.x, tileY: at.y, height: this.heightNow() };
+	}
+
+	/** The grid point facing the camera: the view's, carried round as the planet has turned. */
+	private facing(): { x: number; y: number } {
+		if (this.spin === 0) return this.view;
+		return this.tileOfDir(this.dirOf(this.view.x, this.view.y).applyAxisAngle(POLE_AXIS, -this.spin));
+	}
+
 	/** Back down to the world under the view's centre. */
 	leaveAtCenter(): void {
-		this.leave({ tileX: this.view.x, tileY: this.view.y, height: this.heightNow() });
+		this.leave(this.centre);
 	}
 
 	/** Leaves without going anywhere (another view takes over). */
@@ -305,12 +323,17 @@ export class Globe {
 			this.leaveAtCenter();
 			return;
 		}
-		// Turned so the view's point faces the camera (on the +z axis) with the grid's north up.
+		// The clouds' pace: time run on or back (the viewer's Y) speeds both up.
+		const pace = dt * (timeRunning ? timeRunning * CLOUDS_FAST : 1);
+		this.spin = (this.spin + pace * SPIN_RATE) % (Math.PI * 2);
+		// Turned so the view's point faces the camera (on the +z axis) with the grid's north up,
+		// then on round its axis as it spins.
 		const dir = this.dirOf(this.view.x, this.view.y);
 		const north = this.dirOf(this.view.x, this.view.y - 0.01).sub(this.dirOf(this.view.x, this.view.y + 0.01));
 		north.addScaledVector(dir, -north.dot(dir)).normalize();
 		const east = new THREE.Vector3().crossVectors(north, dir);
 		this.planet.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(east, north, dir)).invert();
+		this.planet.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(POLE_AXIS, this.spin));
 		this.camera.position.set(0, 0, this.dist);
 		this.camera.lookAt(0, 0, 0);
 
@@ -330,7 +353,7 @@ export class Globe {
 		const sunObj = sunDir.clone().applyQuaternion(this.planet.quaternion.clone().invert());
 		this.shared.sunObj.value.copy(sunObj);
 		this.shared.camObj.value.copy(this.camera.position).applyQuaternion(this.planet.quaternion.clone().invert());
-		this.cloudClock = (this.cloudClock + dt * (timeRunning ? timeRunning * CLOUDS_FAST : 1)) % 100000;
+		this.cloudClock = (this.cloudClock + pace) % 100000;
 		this.shared.cloudTime.value = this.cloudClock;
 		(this.halo.material as THREE.ShaderMaterial).uniforms.sunDir.value.copy(sunDir);
 		// Far off, so the planet hides it when the sun is behind; the glare peeks round the rim.

@@ -22,6 +22,15 @@ import { RETAIL } from '../edition';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const status = $('status');
 
+/** Set in session storage on switching editions, so classic reached from retail stays classic. */
+const SWITCHED_KEY = 'mapExplorer.switched';
+
+// Retail is the edition to start in: classic opened with no view in the URL (the launcher opens
+// it so) goes on to retail, unless it was switched to from retail (see setUpEdition). The mark is
+// always taken, so it can't linger for a later start.
+const switchedHere = takeSwitched();
+if (!RETAIL && !location.hash && !switchedHere) location.replace(`retail/${location.search}`);
+
 setUpEdition();
 
 /**
@@ -68,21 +77,50 @@ function setUpEdition(): void {
 	// in the other, which then opens at its start.
 	// The time of day too, when it's been moved off the local clock (Y, or the View panel):
 	// handed over in this tab's session storage, which both builds share (one origin).
+	// On the planet, the other opens on the planet too, at the same place (see Viewer.planetHandoff).
 	link.addEventListener('click', (e) => {
 		const hash = infoViewer?.viewHash() ?? location.hash;
 		const shared = /^#[01]\//.test(hash);
+		const planet = infoViewer?.planetHandoff() ?? null;
 		e.preventDefault();
 		try {
+			sessionStorage.setItem(SWITCHED_KEY, '1');
+			if (planet !== null) sessionStorage.setItem(SWITCH_PLANET_KEY, planet);
+			else sessionStorage.removeItem(SWITCH_PLANET_KEY);
 			if (infoViewer && !infoViewer.timeIsLocal) sessionStorage.setItem(SWITCH_TIME_KEY, String(infoViewer.timeMinutes));
 			else sessionStorage.removeItem(SWITCH_TIME_KEY);
 		} catch {
 			// No session storage (private windows): the other build starts at the local time.
 		}
-		location.href = link.href.split('#')[0] + (shared ? hash : '');
+		location.href = link.href.split('#')[0] + (planet === null && shared ? hash : '');
 	});
 }
 
 const SWITCH_TIME_KEY = 'mapExplorer.switchTime';
+/** The planet view handed over on switching editions (see Viewer.planetHandoff). */
+const SWITCH_PLANET_KEY = 'mapExplorer.switchPlanet';
+
+/** On arriving from the other build on the planet: the planet, at the place it was showing. */
+function takeSwitchPlanet(viewer: Viewer): void {
+	try {
+		const planet = sessionStorage.getItem(SWITCH_PLANET_KEY);
+		sessionStorage.removeItem(SWITCH_PLANET_KEY);
+		if (planet !== null) viewer.showPlanetAt(planet);
+	} catch {
+		// No session storage: nothing was handed over.
+	}
+}
+
+/** Whether this page was reached with the edition switch (and forgets it). */
+function takeSwitched(): boolean {
+	try {
+		const switched = sessionStorage.getItem(SWITCHED_KEY) === '1';
+		sessionStorage.removeItem(SWITCHED_KEY);
+		return switched;
+	} catch {
+		return false;
+	}
+}
 
 /** On arriving from the other build: the time of day it was showing (see setUpEdition). */
 function takeSwitchTime(viewer: Viewer): void {
@@ -277,6 +315,8 @@ async function explore(): Promise<void> {
 		if (import.meta.env.DEV) (globalThis as unknown as { mapExplorerViewer: Viewer }).mapExplorerViewer = viewer;
 		viewer.onShotStatus = showShotStatus;
 		await viewer.load((text) => showProgress(text));
+		// Arrived from the other edition on the planet: once the world is laid out, the planet again.
+		takeSwitchPlanet(viewer);
 		const { minimapArrow } = await ui;
 		showProgress('Starting');
 		$('start').hidden = true;
