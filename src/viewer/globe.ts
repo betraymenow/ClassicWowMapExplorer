@@ -171,7 +171,8 @@ export class Globe {
 		this.coastTexture = canvasTexture(this.coastCanvas, false);
 		const relief = reliefCanvas(continents, farTilesOf, rect);
 
-		const storm = this.maelstromTile();
+		// The Maelstrom's storm (with its red eye): retail only.
+		const storm = RETAIL ? this.maelstromTile() : null;
 		if (storm) this.shared.stormAxis.value.copy(this.dirOf(storm.x, storm.y));
 		else this.shared.stormRadius.value = 0;
 
@@ -720,12 +721,12 @@ const CLOUDS_GLSL = /* glsl */ `
 	${NOISE_GLSL}
 	float plainClouds(vec3 p, int octaves) {
 		// Drifting east round the poles' axis, and slowly changing shape.
-		float turn = cloudTime * 0.004;
+		float turn = cloudTime * 0.008;
 		float c = cos(turn);
 		float s = sin(turn);
 		vec3 q = vec3(c * p.x - s * p.z, p.y, s * p.x + c * p.z);
 		vec3 st = q * vec3(5.0, 8.0, 5.0);
-		float evolve = cloudTime * 0.002;
+		float evolve = cloudTime * 0.004;
 		int wo = min(octaves, 2);
 		vec3 warp = vec3(
 			fbmN(st * 0.45 + vec3(3.1, 7.7, evolve), wo),
@@ -766,7 +767,7 @@ const CLOUDS_GLSL = /* glsl */ `
  * The planet's surface: the land in natural colours where the world is (rock and snow up the
  * mountains, shaded from the heights, with the minimap's own light and dark for texture),
  * otherwise sea (deep blue swells, turquoise in the shallows, ice towards the poles); lit by the
- * sun with a soft dusk at the edge of night, the clouds' shadows, the sea's glint, the
+ * sun with a soft dusk at the edge of night, the clouds' shadows, the
  * Maelstrom's red glow through its eye and the air's blue at the rim. Worked out in the planet's
  * own space; the world grid is unwrapped from the sphere as the Globe's dirOf does it.
  */
@@ -886,10 +887,6 @@ function surfaceMaterial(o: {
 				// The clouds' shadows, a little off towards the sun.
 				float shadow = cloudDensity(normalize(p + sunObj * 0.012), 2);
 				vec3 col = albedo * (vec3(0.012, 0.018, 0.04) + sunColor * max(ndl, 0.0) * 1.35 * day * (1.0 - 0.3 * shadow));
-				// The sun's glint on open water.
-				vec3 hv = normalize(sunObj + v);
-				float glint = pow(max(dot(p, hv), 0.0), 300.0) * (0.5 + swell) * (1.0 - landA) * (1.0 - ice) * day;
-				col += vec3(0.85, 0.85, 0.8) * glint * 0.2;
 				// The Maelstrom's fiery eye, seen through the clear middle of its storm.
 				if (stormRadius > 0.0) {
 					float e = acos(clamp(dot(p, stormAxis), -1.0, 1.0)) / stormRadius;

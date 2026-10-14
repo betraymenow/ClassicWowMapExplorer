@@ -132,7 +132,7 @@ const MIN_FAR = 1500;
  * public/music/planet.mp3 (not in the repository, since it's the game's music). Without the
  * file the planet is just quiet.
  */
-const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Krokuun' };
+const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Argus' };
 
 /** Climbing above this height (yards over the ground) shows Azeroth as a planet (see Globe). */
 const GLOBE_ENTER_ALTITUDE = 40000;

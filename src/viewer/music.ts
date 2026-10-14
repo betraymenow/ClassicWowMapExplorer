@@ -16,10 +16,6 @@ const GAP: [number, number] = [15000, 45000];
 const AFTER_INTRO = 2000;
 /** Music volume at full setting in the Sound panel. */
 const VOLUME = 0.5;
-/** Seconds a track of the person's own (the planet view's) takes to rise from silence to full. */
-const OWN_TRACK_FADE_IN = 3;
-/** A track of the person's own (the planet view's) plays this much quieter than the game's music. */
-const OWN_TRACK_VOLUME = 0.5;
 /** Decoded tracks kept as object URLs. */
 const URL_CACHE = 8;
 const STORAGE_KEY = 'mapExplorer.music';
@@ -44,12 +40,6 @@ interface Voice {
 	/** 1 while playing, 0 while fading out. */
 	target: number;
 	level: number;
-	/** How loud this track plays, as a share of the music volume. */
-	gain: number;
-	/** Seconds to rise from silence to full. */
-	fadeIn: number;
-	/** Not sounding yet (loading, or finding its starting point): the fade in waits for it. */
-	waiting?: boolean;
 }
 
 /**
@@ -198,19 +188,15 @@ export class MusicPlayer {
 	}
 
 	private playOwn(track: OwnTrack): void {
+		// From the start each time, looping, at full music volume at once (no fade in).
 		const audio = new Audio(track.url);
 		audio.loop = true;
-		audio.volume = 0;
+		audio.volume = VOLUME * volume('music');
 		if (this.filter?.context.state === 'running') this.filter.context.createMediaElementSource(audio).connect(this.filter.node);
-		const voice: Voice = { audio, target: 1, level: 0, gain: OWN_TRACK_VOLUME, fadeIn: OWN_TRACK_FADE_IN, waiting: true };
-		audio.addEventListener('playing', () => (voice.waiting = false), { once: true });
+		const voice: Voice = { audio, target: 1, level: 1 };
 		this.voices.push(voice);
 		this.current = voice;
 		this.title = track.title;
-		// From a random point each time, not always the opening (it fades in from there).
-		audio.addEventListener('loadedmetadata', () => {
-			if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Math.random() * audio.duration;
-		}, { once: true });
 		// A missing file just stays silent (the voice keeps its place, so it isn't retried every frame).
 		audio.addEventListener('error', () => console.warn(`Music ${track.url}: could not be played`));
 		audio.play().then(() => (this.blocked = false), () => (this.blocked = true));
@@ -237,7 +223,7 @@ export class MusicPlayer {
 		audio.volume = 0;
 		// Through the filter only while Web Audio runs; otherwise the track would be silent.
 		if (this.filter?.context.state === 'running') this.filter.context.createMediaElementSource(audio).connect(this.filter.node);
-		const voice: Voice = { audio, target: 1, level: 0, gain: 1, fadeIn: FADE_IN };
+		const voice: Voice = { audio, target: 1, level: 0 };
 		this.voices.push(voice);
 		this.current = voice;
 		this.title = title;
@@ -285,12 +271,8 @@ export class MusicPlayer {
 	private fade(dt: number): void {
 		for (let i = this.voices.length - 1; i >= 0; i--) {
 			const v = this.voices[i];
-			if (v.waiting && v.target > 0) {
-				v.audio.volume = 0;
-				continue;
-			}
-			v.level = v.target > v.level ? Math.min(v.target, v.level + dt / v.fadeIn) : Math.max(v.target, v.level - dt / FADE_OUT);
-			v.audio.volume = v.level * v.level * VOLUME * v.gain * volume('music');
+			v.level = v.target > v.level ? Math.min(v.target, v.level + dt / FADE_IN) : Math.max(v.target, v.level - dt / FADE_OUT);
+			v.audio.volume = v.level * v.level * VOLUME * volume('music');
 			if (v.target === 0 && v.level === 0) {
 				v.audio.pause();
 				v.audio.removeAttribute('src');
