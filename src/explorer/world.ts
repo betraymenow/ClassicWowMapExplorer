@@ -11,7 +11,7 @@ import { MusicTables, type MusicData, type WmoArea } from './music';
 import type { MapExplorer } from './maps';
 import { loadWorldMaps, type WorldMapInfo } from './worldMap';
 import { loadPlaces, type Place } from './places';
-import { KNOWN_MAPS, SWORD_OF_SARGERAS, TERRAIN_SWAPS } from './maps';
+import { isHiddenTile, KNOWN_MAPS, SWORD_OF_SARGERAS, TERRAIN_SWAPS } from './maps';
 import { RETAIL } from '../edition';
 import { globalWmoPlacement, globalWmoTiles, loadM2, loadWmo, parsePlacements, type ModelData, type ObjectKind, type Placement } from './objects';
 import { GroundEffects, type ClutterSource } from './groundEffects';
@@ -184,7 +184,8 @@ export class WorldLoader {
 	/** Low-detail terrain for a map: from its WDL, or, without one (wdlFdid 0), from its ADTs. */
 	async loadFarTiles(wdtFdid: number, wdlFdid: number): Promise<FarTile[]> {
 		const wdt = await this.maps.wdt(wdtFdid);
-		const wdl = wdlFdid ? parseWdl(await this.storage.readFile(wdlFdid)) : await this.farFromAdts(wdtFdid);
+		// Tiles the map leaves out (see KNOWN_MAPS hiddenTiles) have no low-detail ground either.
+		const wdl = (wdlFdid ? parseWdl(await this.storage.readFile(wdlFdid)) : await this.farFromAdts(wdtFdid)).filter((t) => !isHiddenTile(wdtFdid, t.x, t.y));
 		// Terrain swaps' tiles replace the base map's: their low-detail heights from their own ADTs.
 		for (const swap of TERRAIN_SWAPS[wdtFdid] ?? []) {
 			for (const t of await this.farFromAdts(swap.wdt)) {

@@ -24,6 +24,7 @@ import { Highlights, type HighlightSettings } from './highlights';
 import { setWalkableShown } from './walkable';
 import { MapLabels } from './mapLabels';
 import { DAY, Lighting, Sky, sunDirection } from './lighting';
+import { Argus } from './argus';
 import { Globe } from './globe';
 import { MusicPlayer, type MusicTarget, type OwnTrack } from './music';
 import { Nameplates, type Plate, type Side } from './nameplates';
@@ -428,6 +429,8 @@ export class Viewer {
 	private readonly sun = new SunLight(0xfff2dd);
 	private readonly ambient = new THREE.HemisphereLight(0x8899aa, 0x8899aa);
 	private readonly sky = new Sky();
+	/** Argus over Azeroth (retail), in the sky (see Argus). */
+	private readonly argus: Argus | null = RETAIL ? new Argus(true) : null;
 	private lighting: Lighting | null = null;
 	private readonly areas = new Map<number, AreaInfo>();
 	/** Half-minutes added to the local clock (T / Shift+T, N resets). */
@@ -573,6 +576,7 @@ export class Viewer {
 		this.sun.shadow.radius = 2;
 		this.sun.shadow.intensity = SHADOW_INTENSITY;
 		this.scene.add(this.sun, this.ambient, this.sky.mesh);
+		if (this.argus) this.scene.add(this.argus.group);
 		// Off to the right, so nearby surfaces get some shading rather than flat front light.
 		this.torch.position.copy(TORCH_POSITION);
 		this.camera.add(this.torch);
@@ -1815,6 +1819,10 @@ export class Viewer {
 			this.updateLighting();
 		}
 		this.sky.mesh.position.copy(pos);
+		if (this.argus) {
+			this.argus.placeInSky(pos);
+			this.argus.update(now / 1000, sunDirection(this.timeOfDay()), this.camera);
+		}
 		// A few out-of-phase sines give the flame's flicker.
 		const s = now / 1000;
 		this.torch.intensity = TORCH_INTENSITY * (1 + 0.06 * Math.sin(s * 11.3) + 0.04 * Math.sin(s * 23.7 + 1.3) + 0.03 * Math.sin(s * 5.1 + 0.4));
@@ -2092,6 +2100,8 @@ export class Viewer {
 		const u = this.underwater;
 		const murky = u && (u.kind === 'slime' || u.kind === 'magma') ? { ...u, kind: u.kind } : null;
 		this.sky.mesh.visible = !murky;
+		// Not in the sky underground (Deepholm) or where the sky itself is hidden.
+		if (this.argus) this.argus.group.visible = !murky && this.wowPosition()?.mapId !== DEEPHOLM_MAP;
 		const base = this.lowestGroundAround(this.camera.position);
 		this.fogBase = this.fogBase === null ? base : this.fogBase + (base - this.fogBase) * 0.15;
 		this.fogLook.base = this.fogBase;

@@ -15,12 +15,14 @@ import { RETAIL } from '../edition';
  * tiles load in full detail (with all their models), for a small map whose whole look is in its
  * models (the whirlpool), so it shows from afar.
  */
-export const KNOWN_MAPS: { name: string; directory: string; mapId: number; wdt: number; wdl: number; between?: boolean; underground?: boolean; detailDistance?: number }[] = [
+export const KNOWN_MAPS: { name: string; directory: string; mapId: number; wdt: number; wdl: number; between?: boolean; underground?: boolean; detailDistance?: number; hiddenTiles?: TileRect[] }[] = [
 	{ name: 'Eastern Kingdoms', directory: 'Azeroth', mapId: 0, wdt: 775971, wdl: 775970 },
 	{ name: 'Kalimdor', directory: 'Kalimdor', mapId: 1, wdt: 782779, wdl: 782778 },
 	// Retail only; its WDL isn't right before its WDT.
 	...(RETAIL ? [
-		{ name: 'Zandalar', directory: 'Zandalar', mapId: 1642, wdt: 1436413, wdl: 1436416 },
+		// Out in the open sea Zandalar has blocks of flat filler tiles a little above the water, with
+		// a plain grey minimap: left out, so no bare grey plates stand in the sea.
+		{ name: 'Zandalar', directory: 'Zandalar', mapId: 1642, wdt: 1436413, wdl: 1436416, hiddenTiles: [[58, 0, 63, 12], [57, 5, 57, 7], [16, 27, 16, 32]] as TileRect[] },
 		{ name: 'The Maelstrom', directory: 'MaelstromZone', mapId: 730, wdt: 816998, wdl: 0, between: true, detailDistance: 8000 },
 		{ name: 'Deepholm', directory: 'Deephome', mapId: 646, wdt: 816934, wdl: 0, underground: true },
 	] : []),
@@ -41,6 +43,15 @@ export const TERRAIN_SWAPS: Record<number, { wdt: number }[]> = RETAIL ? { 78277
  * map files place, but only as a nearby doodad).
  */
 export const SWORD_OF_SARGERAS = { fdid: 1668175, mapId: 1, tileX: 28, tileY: 43, effects: [1782994, 1822190] };
+
+/** Tiles x0..x1, y0..y1 (inclusive) of a map's grid. */
+export type TileRect = [number, number, number, number];
+
+/** Whether a map (by its WDT) leaves out this tile (see KNOWN_MAPS hiddenTiles). */
+export function isHiddenTile(wdtFdid: number, x: number, y: number): boolean {
+	const rects = KNOWN_MAPS.find((m) => m.wdt === wdtFdid)?.hiddenTiles;
+	return !!rects?.some(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1);
+}
 
 export type FileAvailability = Record<TileFileKind, Partial<Record<FileStatus | 'none', number>>>;
 
@@ -84,6 +95,7 @@ export class MapExplorer {
 		let wdt = this.wdts.get(fdid);
 		if (!wdt) {
 			wdt = parseWdt(await this.storage.readFile(fdid));
+			for (let i = 0; i < wdt.tiles.length; i++) if (isHiddenTile(fdid, i % 64, Math.floor(i / 64))) wdt.tiles[i] = null;
 			for (const swap of TERRAIN_SWAPS[fdid] ?? []) {
 				const tiles = parseWdt(await this.storage.readFile(swap.wdt)).tiles;
 				tiles.forEach((t, i) => {

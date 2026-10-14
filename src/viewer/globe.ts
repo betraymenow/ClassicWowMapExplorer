@@ -8,6 +8,8 @@ import { SWORD_OF_SARGERAS } from '../explorer/maps';
 import { RETAIL } from '../edition';
 import { createModelMaterial } from './modelMaterials';
 import { createTexture } from './textures';
+import { NOISE_GLSL } from './noiseGlsl';
+import { Argus } from './argus';
 
 /**
  * Azeroth as a planet, seen as from space: the continents coloured as the land would look
@@ -36,6 +38,8 @@ const BIOME_CELL = 8;
 /** Pixels per tile in the heights picture (a WDL tile's 16 cells). */
 const RELIEF_CELL = 16;
 const BATCH = 48;
+/** Mouse movement (px) under which a press is still a click (a double-click goes down) rather than a drag. */
+const DRAG_SLOP = 4;
 /** Camera distance from the centre, in globe radii. */
 const DIST_MIN = 1.18;
 const DIST_MAX = 4.5;
@@ -55,6 +59,13 @@ const CLOUDS_FAST = 40;
  * it matches the flat world's when going down).
  */
 const SWORD_BOOST = 1.6;
+/**
+ * Argus out in space (retail): in the background, low and to the right behind Azeroth, fixed
+ * like the stars rather than turning with the planet (in the direction it hangs in the world's
+ * sky it would be on the camera's side, out of view). In Azeroth's radii.
+ */
+const ARGUS_POSITION = new THREE.Vector3(12.8, -6, -24);
+const ARGUS_RADIUS = 3;
 /** The Maelstrom's storm: its radius (radians round the globe). */
 const STORM_RADIUS = 0.15;
 
@@ -87,6 +98,7 @@ export class Globe {
 	/** Lights for the models standing on the planet (the surface and clouds light themselves). */
 	private readonly sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
 	private readonly sword = new THREE.Group();
+	private readonly argus: Argus | null = RETAIL ? new Argus(false) : null;
 	private readonly landCanvas = document.createElement('canvas');
 	private readonly landTexture: THREE.CanvasTexture;
 	private readonly biomeCanvas = document.createElement('canvas');
@@ -108,7 +120,10 @@ export class Globe {
 	private view = { x: 0, y: 0 };
 	private dist = DIST_START;
 	private targetDist = DIST_START;
-	private drag: { x: number; y: number } | null = null;
+	/** A drag turning the planet: how far the mouse has moved (px) since the press. */
+	private drag: { moved: number } | null = null;
+	/** The mouse is locked (and the pointer hidden) for the current drag. */
+	private dragLock = false;
 	private readonly world: Rect;
 	/** Radians round the globe per tile. */
 	private readonly scale: number;
@@ -177,22 +192,45 @@ export class Globe {
 		this.scene.add(this.planet, this.halo, nebula(), stars(), this.sun, new THREE.AmbientLight(0x6070a0, 0.35));
 		this.planet.add(this.sword);
 		if (RETAIL) void this.buildSword();
+		if (this.argus) {
+			this.argus.group.position.copy(ARGUS_POSITION);
+			this.argus.group.scale.setScalar(ARGUS_RADIUS);
+			this.scene.add(this.argus.group);
+		}
 
 		this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('255,248,230', 0.16), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
 		this.scene.add(this.sunGlow);
 
+		// Dragging turns the planet. As on the flat world (see FlyControls), past a few pixels the
+		// pointer is hidden and the mouse locked for the drag, so the pointer is back where the press
+		// was when the button comes up (the browser restores it on unlock).
 		element.addEventListener('pointerdown', (e) => {
 			if (!this.active || e.button !== 0) return;
-			this.drag = { x: e.clientX, y: e.clientY };
+			this.drag = { moved: 0 };
 		});
 		window.addEventListener('pointermove', (e) => {
 			if (!this.active || !this.drag) return;
+			// Browsers now and then report a bogus jump (the hidden pointer being recentred).
+			if (Math.abs(e.movementX) > window.innerWidth / 3 || Math.abs(e.movementY) > window.innerHeight / 3) return;
+			this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+			if (this.drag.moved > DRAG_SLOP && !this.dragLock) {
+				this.dragLock = true;
+				document.documentElement.classList.add('cursor-hidden', 'drag-lock');
+				const request = (this.element.requestPointerLock as (options?: { unadjustedMovement?: boolean }) => Promise<void> | void).call(this.element, { unadjustedMovement: true });
+				if (request instanceof Promise) request.catch(() => this.element.requestPointerLock());
+			}
 			// Turn less the closer the camera, so the ground under the mouse keeps up.
 			const k = (0.0045 * (this.dist - 1)) / this.scale;
-			this.moveView(this.view.x - (e.clientX - this.drag.x) * k, this.view.y - (e.clientY - this.drag.y) * k);
-			this.drag = { x: e.clientX, y: e.clientY };
+			this.moveView(this.view.x - e.movementX * k, this.view.y - e.movementY * k);
 		});
-		window.addEventListener('pointerup', () => (this.drag = null));
+		window.addEventListener('pointerup', (e) => {
+			if (e.button === 0) this.endDrag();
+		});
+		window.addEventListener('blur', () => this.endDrag());
+		// Let go before the lock took (a quick drag): release it as soon as it comes.
+		document.addEventListener('pointerlockchange', () => {
+			if (this.active && !this.dragLock && document.pointerLockElement === this.element) document.exitPointerLock();
+		});
 		element.addEventListener('wheel', (e) => {
 			if (!this.active) return;
 			e.preventDefault();
@@ -241,7 +279,16 @@ export class Globe {
 	/** Leaves without going anywhere (another view takes over). */
 	close(): void {
 		this.active = false;
+		this.endDrag();
+	}
+
+	/** Ends a drag: the pointer shown again, and the drag's mouse lock (if any) released. */
+	private endDrag(): void {
 		this.drag = null;
+		if (!this.dragLock) return;
+		this.dragLock = false;
+		document.documentElement.classList.remove('cursor-hidden', 'drag-lock');
+		if (document.pointerLockElement === this.element) document.exitPointerLock();
 	}
 
 	/** timeRunning: 1 or -1 while time is being run on or back (see the viewer's Y), else 0. */
@@ -271,6 +318,11 @@ export class Globe {
 		(this.halo.material as THREE.ShaderMaterial).uniforms.sunDir.value.copy(sunDir);
 		// Far off, so the planet hides it when the sun is behind; the glare peeks round the rim.
 		this.sun.position.copy(sunDir);
+		if (this.argus) {
+			// Its wound turned towards the viewer.
+			this.argus.group.lookAt(this.camera.position);
+			this.argus.update(performance.now() / 1000, sunDir, this.camera);
+		}
 		this.sword.scale.setScalar(1 + (SWORD_BOOST - 1) * THREE.MathUtils.smoothstep(this.dist, DIST_EXIT, DIST_START));
 		this.sunGlow.position.copy(sunDir).multiplyScalar(40);
 		this.sunGlow.scale.setScalar(26);
@@ -348,7 +400,7 @@ export class Globe {
 			for (let i = 0; i < coords.length; i += BATCH) {
 				const thumbs = await this.storage.minimapThumbnails(c.wdt, coords.slice(i, i + BATCH), LAND_CELL).catch(() => []);
 				for (const { x, y, image } of thumbs) {
-					if (!image) continue;
+					if (!image || isPlainFill(image.rgba)) continue;
 					const rgba = new Uint8ClampedArray(image.rgba);
 					seeThroughSea(rgba);
 					sctx.clearRect(0, 0, LAND_CELL, LAND_CELL);
@@ -507,6 +559,24 @@ function blurred(source: HTMLCanvasElement, w: number, h: number, radius: number
 	return ctx.getImageData(0, 0, w, h).data;
 }
 
+/**
+ * A minimap image all one colour: a tile of open sea with nothing on it, drawn as a plain fill
+ * (dark blue on the older continents, grey on Zandalar's). Never land, which always varies.
+ */
+function isPlainFill(rgba: Uint8Array | Uint8ClampedArray): boolean {
+	let sum = 0;
+	let squares = 0;
+	const n = rgba.length / 4;
+	for (let i = 0; i < rgba.length; i += 4) {
+		const l = (rgba[i] + rgba[i + 1] + rgba[i + 2]) / 3;
+		sum += l;
+		squares += l * l;
+	}
+	const mean = sum / n;
+	// (Their edges carry a faint border line; land varies far more, by tens.)
+	return squares / n - mean * mean < 64;
+}
+
 /** The minimap images draw the sea a dark blue-green: made see-through (fading in at the shore) so the planet's own sea shows. */
 function seeThroughSea(rgba: Uint8ClampedArray): void {
 	for (let i = 0; i < rgba.length; i += 4) {
@@ -631,34 +701,7 @@ const CLOUDS_GLSL = /* glsl */ `
 	uniform float cloudTime;
 	uniform vec3 stormAxis;
 	uniform float stormRadius;
-	float hash3(vec3 p) {
-		p = fract(p * 0.3183099 + 0.1);
-		p *= 17.0;
-		return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-	}
-	float vnoise(vec3 x) {
-		vec3 i = floor(x);
-		vec3 f = fract(x);
-		f = f * f * (3.0 - 2.0 * f);
-		return mix(
-			mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y),
-			mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y),
-			f.z);
-	}
-	const mat3 OCTAVE = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64);
-	float fbmN(vec3 p, int octaves) {
-		float sum = 0.0;
-		float amp = 0.5;
-		float total = 0.0;
-		for (int i = 0; i < 8; i++) {
-			if (i >= octaves) break;
-			sum += amp * vnoise(p);
-			total += amp;
-			p = OCTAVE * p * 2.03;
-			amp *= 0.5;
-		}
-		return sum / total;
-	}
+	${NOISE_GLSL}
 	float plainClouds(vec3 p, int octaves) {
 		// Drifting east round the poles' axis, and slowly changing shape.
 		float turn = cloudTime * 0.004;
