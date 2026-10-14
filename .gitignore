@@ -3,3 +3,6 @@ dist/
 release/
 out/
 .cache/
+
+# Music of your own for the planet view (the game's music: not to be published)
+public/music/

@@ -16,12 +16,20 @@ const GAP: [number, number] = [15000, 45000];
 const AFTER_INTRO = 2000;
 /** Music volume at full setting in the Sound panel. */
 const VOLUME = 0.5;
+/** A track of the person's own (the planet view's) plays this much quieter than the game's music. */
+const OWN_TRACK_VOLUME = 0.6;
 /** Decoded tracks kept as object URLs. */
 const URL_CACHE = 8;
 const STORAGE_KEY = 'mapExplorer.music';
 /** Low-pass cut-off (Hz) for music heard from under water. */
 const MUFFLED = 600;
 const CLEAR = 20000;
+
+/** A track of the person's own (not from the game files), by URL, with its title for the HUD. */
+export interface OwnTrack {
+	url: string;
+	title: string;
+}
 
 /** What should be playing: a ZoneMusic set and an intro (0 = none). */
 export interface MusicTarget {
@@ -34,6 +42,8 @@ interface Voice {
 	/** 1 while playing, 0 while fading out. */
 	target: number;
 	level: number;
+	/** How loud this track plays, as a share of the music volume. */
+	gain: number;
 }
 
 /**
@@ -59,6 +69,8 @@ export class MusicPlayer {
 	private blocked = false;
 	/** Files that must keep their URL (looping sounds), whatever the cache holds. */
 	private readonly pinned = new Set<number>();
+	/** Played on a loop instead of the zone music while set (the planet view's); null for the zone music. */
+	private own: OwnTrack | null = null;
 	/** Music runs through a low-pass filter, so it can sound muffled from under water. */
 	private readonly filter: { context: AudioContext; node: BiquadFilterNode } | null = null;
 
@@ -112,6 +124,7 @@ export class MusicPlayer {
 	get status(): string {
 		if (!this.enabledValue) return 'off';
 		if (this.blocked) return 'click to start';
+		if (this.own) return this.own.title;
 		const set = this.data.sets[this.applied.set];
 		if (!set) return 'none here';
 		return this.current ? this.title : `${set.name} (quiet)`;
@@ -120,6 +133,11 @@ export class MusicPlayer {
 	/** Call every frame with where the camera is and whether it's night. */
 	update(dt: number, now: number, want: MusicTarget, night: boolean): void {
 		this.fade(dt);
+		// A track of the person's own takes over: it (re)starts whenever music is on and it isn't playing.
+		if (this.own) {
+			if (this.enabledValue && !this.current) this.playOwn(this.own);
+			return;
+		}
 		if (want.set !== this.applied.set || want.intro !== this.applied.intro) {
 			if (!this.pending || this.pending.set !== want.set || this.pending.intro !== want.intro) {
 				this.pending = want;
@@ -159,6 +177,38 @@ export class MusicPlayer {
 		}
 	}
 
+	/**
+	 * Plays a track of the person's own on a loop instead of the zone music, crossfading (the
+	 * planet view's music), or with null goes back to the zone music.
+	 */
+	setOwnTrack(track: OwnTrack | null): void {
+		if (track?.url === this.own?.url) return;
+		this.own = track;
+		this.token++;
+		this.fadeOutCurrent();
+		// Back to the zone: straight into its music, as if just arrived.
+		this.nextAt = track ? Infinity : 0;
+		if (track && this.enabledValue) this.playOwn(track);
+	}
+
+	private playOwn(track: OwnTrack): void {
+		const audio = new Audio(track.url);
+		audio.loop = true;
+		audio.volume = 0;
+		if (this.filter?.context.state === 'running') this.filter.context.createMediaElementSource(audio).connect(this.filter.node);
+		const voice: Voice = { audio, target: 1, level: 0, gain: OWN_TRACK_VOLUME };
+		this.voices.push(voice);
+		this.current = voice;
+		this.title = track.title;
+		// From a random point each time, not always the opening (it fades in from there).
+		audio.addEventListener('loadedmetadata', () => {
+			if (Number.isFinite(audio.duration) && audio.duration > 0) audio.currentTime = Math.random() * audio.duration;
+		}, { once: true });
+		// A missing file just stays silent (the voice keeps its place, so it isn't retried every frame).
+		audio.addEventListener('error', () => console.warn(`Music ${track.url}: could not be played`));
+		audio.play().then(() => (this.blocked = false), () => (this.blocked = true));
+	}
+
 	/** Starts a track; when it ends, the next may start at the time `after` gives. */
 	private async play(file: number, title: string, after: () => number): Promise<void> {
 		if (!file) {
@@ -180,7 +230,7 @@ export class MusicPlayer {
 		audio.volume = 0;
 		// Through the filter only while Web Audio runs; otherwise the track would be silent.
 		if (this.filter?.context.state === 'running') this.filter.context.createMediaElementSource(audio).connect(this.filter.node);
-		const voice: Voice = { audio, target: 1, level: 0 };
+		const voice: Voice = { audio, target: 1, level: 0, gain: 1 };
 		this.voices.push(voice);
 		this.current = voice;
 		this.title = title;
@@ -229,7 +279,7 @@ export class MusicPlayer {
 		for (let i = this.voices.length - 1; i >= 0; i--) {
 			const v = this.voices[i];
 			v.level = v.target > v.level ? Math.min(v.target, v.level + dt / FADE_IN) : Math.max(v.target, v.level - dt / FADE_OUT);
-			v.audio.volume = v.level * v.level * VOLUME * volume('music');
+			v.audio.volume = v.level * v.level * VOLUME * v.gain * volume('music');
 			if (v.target === 0 && v.level === 0) {
 				v.audio.pause();
 				v.audio.removeAttribute('src');

@@ -25,7 +25,7 @@ import { setWalkableShown } from './walkable';
 import { MapLabels } from './mapLabels';
 import { DAY, Lighting, Sky, sunDirection } from './lighting';
 import { Globe } from './globe';
-import { MusicPlayer, type MusicTarget } from './music';
+import { MusicPlayer, type MusicTarget, type OwnTrack } from './music';
 import { Nameplates, type Plate, type Side } from './nameplates';
 import { CLUTTER_RANGE_DEFAULT, ClutterManager } from './clutter';
 import { headPosition, ObjectManager } from './objects';
@@ -125,6 +125,13 @@ const UNDERWATER: Record<'slime' | 'magma', { far: number; color: number }> = {
 const FAR_PAST_FOG = 1.1;
 /** Yards; the far plane never comes closer than this, so the sky dome (1000 yd around the camera) always shows. */
 const MIN_FAR = 1500;
+/**
+ * Music for the planet view, instead of the zone music: an MP3 of the person's own placed at
+ * public/music/planet.mp3 (not in the repository, since it's the game's music). Without the
+ * file the planet is just quiet.
+ */
+const PLANET_MUSIC: OwnTrack = { url: new URL('music/planet.mp3', document.baseURI).href, title: 'Antoran Wastes' };
+
 /** Climbing above this height (yards over the ground) shows Azeroth as a planet (see Globe). */
 const GLOBE_ENTER_ALTITUDE = 40000;
 /** Height (yards) the camera comes back down to from the planet: well under where it would switch again. */
@@ -1315,6 +1322,7 @@ export class Viewer {
 		// The world below keeps its camera; the keys and mouse are the planet's.
 		this.controls.enabled = false;
 		document.documentElement.classList.add('globe-view');
+		this.music?.setOwnTrack(PLANET_MUSIC);
 	}
 
 	/**
@@ -1381,6 +1389,7 @@ export class Viewer {
 		this.globe.close();
 		this.controls.enabled = true;
 		document.documentElement.classList.remove('globe-view');
+		this.music?.setOwnTrack(null);
 	}
 
 	/** An angled view over one continent. */
@@ -1752,6 +1761,17 @@ export class Viewer {
 				}
 			}
 			this.globe.update(dt, this.timeOfDay(), this.timeRunning);
+			// The planet's own music plays on (see enterGlobe), and the world's ambient sounds fade away.
+			if (this.music) {
+				const night = sunDirection(this.timeOfDay()).y < 0;
+				this.music.update(dt, now, this.musicTarget, night);
+				this.backgroundAudio?.update(dt, now, null, night, 0, false);
+			}
+			// The HUD (time, music) keeps up on the planet too.
+			if (now - this.lastFpsTime > 500) {
+				this.lastFpsTime = now;
+				this.onHud(this.hudInfo());
+			}
 			// Leaving by zooming in already put the camera back in the world; draw that from now on.
 			if (this.globe.active) {
 				this.globe.render(this.renderer);
