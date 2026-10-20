@@ -13,7 +13,7 @@ import { TILE_SIZE } from '../formats/adt';
 import type { WdtGlobalWmo } from '../formats/wdt';
 import type { LiquidMesh } from './liquidMesh';
 import type { SpawnInfo, SpawnMovement } from './spawns';
-import { SWORD_OF_SARGERAS } from './maps';
+import { DEATHWING_ON_STORMWIND, SWORD_OF_SARGERAS } from './maps';
 import { compose, fromQuaternion, multiply, rotationX, rotationY, rotationZ, scaling, translation, type Mat4 } from './mat4';
 
 const MDDF_FILE_ID = 0x40;
@@ -229,6 +229,8 @@ export interface M2Options {
 	footstep?: number;
 	/** Keep each batch's second texture (see ModelMaterial.texture2). */
 	secondTexture?: boolean;
+	/** Draw only these batches (by index in the skin), and none of the model's particles. */
+	batches?: number[];
 }
 
 /**
@@ -238,6 +240,9 @@ export interface M2Options {
  * Sword of Sargeras' red energy and smoke.
  */
 const SECOND_TEXTURE_MODELS = new Set(SWORD_OF_SARGERAS.effects);
+
+/** Models drawn only in part (see M2Options.batches): Deathwing out of the login screen's scene. */
+const MODEL_PARTS = new Map<number, number[]>([[DEATHWING_ON_STORMWIND.fdid, DEATHWING_ON_STORMWIND.batches]]);
 
 /** A gear model (helmet, shoulder, weapon) and its texture, at an M2 attachment point. */
 export interface GearAttachment {
@@ -350,6 +355,7 @@ function dressM2(prepared: PreparedM2, options: M2Options) {
 		const texture = m2.textures[m2.textureCombos[b.textureComboIndex] ?? -1];
 		const opacity = (m2.transparency[b.transparencyIndex] ?? 1) * (b.colorIndex >= 0 ? m2.colorAlpha[b.colorIndex] ?? 1 : 1);
 		if (opacity <= 0.01 || b.indexCount === 0) return;
+		if (options.batches && !options.batches.includes(i)) return;
 		// Group 0 holds the body (0) and hairstyles (1+); the others default to variant 1, except
 		// the head (group 32), whose variant 1 is an empty stub.
 		if (options.defaultGeosets && b.geoset !== 0) {
@@ -390,6 +396,7 @@ const brokenGear = new Set<number>();
 export async function loadM2(storage: CascStorage, fdid: number, options: M2Options = {}, file?: Uint8Array): Promise<ModelData> {
 	const prepared = await prepareM2(storage, fdid, !!options.stand, file, options.clips);
 	const animated = prepared.animation !== null;
+	options = { ...options, batches: options.batches ?? MODEL_PARTS.get(fdid) };
 	// rest: where the part sits in the resting pose, for its particle emitters.
 	const parts: { prepared: PreparedM2; batches: ModelBatch[]; transform: Mat4 | null; rest: Mat4 | null; bone: number }[] = [
 		{ prepared, batches: dressM2(prepared, { ...options, secondTexture: SECOND_TEXTURE_MODELS.has(fdid) }), transform: null, rest: null, bone: -1 },
@@ -470,7 +477,7 @@ export async function loadM2(storage: CascStorage, fdid: number, options: M2Opti
 	const anim = prepared.animation;
 	// Fresh frames: the arrays are transferred to the main thread, which would empty the cached ones.
 	const place = (p: (typeof parts)[number], frame: Mat4) => (p.rest ? multiply(p.rest, frame) : frame.slice());
-	const emitters = parts.flatMap((p) => p.prepared.emitters.map((e) => ({
+	const emitters = options.batches ? [] : parts.flatMap((p) => p.prepared.emitters.map((e) => ({
 		...e,
 		frame: place(p, e.frame),
 		motion: e.motion && { duration: e.motion.duration, frames: e.motion.frames.map((f) => place(p, f)) },

@@ -11,12 +11,13 @@ import { MusicTables, type MusicData, type WmoArea } from './music';
 import type { MapExplorer } from './maps';
 import { loadWorldMaps, type WorldMapInfo } from './worldMap';
 import { loadPlaces, type Place } from './places';
-import { isHiddenTile, KNOWN_MAPS, SWORD_OF_SARGERAS, TERRAIN_SWAPS } from './maps';
+import { DEATHWING_ON_STORMWIND, isHiddenTile, KNOWN_MAPS, SWORD_OF_SARGERAS, TERRAIN_SWAPS } from './maps';
+import { compose, rotationZ, translation } from './mat4';
 import { RETAIL } from '../edition';
 import { globalWmoPlacement, globalWmoTiles, loadM2, loadWmo, parsePlacements, type ModelData, type ObjectKind, type Placement } from './objects';
 import { GroundEffects, type ClutterSource } from './groundEffects';
 import { PortalSource } from './portals';
-import { DisplayResolver, parseWeapons, SpawnSource, type CharacterOutfit, type CharacterRace } from './spawns';
+import { DisplayResolver, parseWeapons, SpawnSource, spawnMatrix, type CharacterOutfit, type CharacterRace } from './spawns';
 import { buildSplatTerrain, type SplatTerrain } from './splatMesh';
 import { buildTerrainMesh, type TerrainGeometry } from './terrainMesh';
 
@@ -299,6 +300,7 @@ export class WorldLoader {
 		const global = wdt.globalWmo;
 		if (global && globalWmoTiles(global).some(([tx, ty]) => tx === x && ty === y)) placements.push(globalWmoPlacement(global));
 		this.addSwordEffects(placements, wdtFdid, x, y);
+		this.addDeathwing(placements, wdtFdid, x, y);
 		// Spawn placements are cached per tile; send copies of their matrices, since the
 		// transfer to the main thread empties the originals.
 		return placements.concat(spawns.map((p) => ({ ...p, matrix: p.matrix.slice() })), portals);
@@ -317,6 +319,15 @@ export class WorldLoader {
 		const sword = placements.find((p) => p.kind === 'wmo' && p.fdid === SWORD_OF_SARGERAS.fdid);
 		if (!sword) return;
 		effects.forEach((fdid, i) => placements.push({ kind: 'm2', fdid, uid: 0xfffe0000 + i, matrix: sword.matrix.slice(), doodadSet: 0, landmark: true }));
+	}
+
+	/** Deathwing on Stormwind's gate (see DEATHWING_ON_STORMWIND), a landmark on the gate's tile. */
+	private addDeathwing(placements: Placement[], wdtFdid: number, x: number, y: number): void {
+		const d = DEATHWING_ON_STORMWIND;
+		if (!RETAIL || x !== d.tileX || y !== d.tileY || wdtFdid !== KNOWN_MAPS.find((m) => m.mapId === d.mapId)?.wdt) return;
+		const [ax, ay, az] = d.anchor;
+		const matrix = compose(spawnMatrix(d.at[0], d.at[1], d.at[2], rotationZ(d.facing), d.scale), translation(-ax, -ay, -az));
+		placements.push({ kind: 'm2', fdid: d.fdid, uid: 0xfffd0000, matrix, doodadSet: 0, landmark: true });
 	}
 
 	private portalSource: Promise<PortalSource> | null = null;

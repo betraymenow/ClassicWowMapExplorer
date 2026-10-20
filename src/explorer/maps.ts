@@ -44,6 +44,28 @@ export const TERRAIN_SWAPS: Record<number, { wdt: number }[]> = RETAIL ? { 78277
  */
 export const SWORD_OF_SARGERAS = { fdid: 1668175, mapId: 1, tileX: 28, tileY: 43, effects: [1782994, 1822190] };
 
+/**
+ * Deathwing perched on Stormwind's gate, as on Cataclysm's login screen (retail): that screen's
+ * scene model (UI_MainMenu_Cataclysm), of which only Deathwing is drawn (batches; the scene's own
+ * walls, towers, sky and fire are left out), set so his front claws grip the real gate towers' tops
+ * and he looms over the gate as there. Placed with the gate's tile (mapId, tileX, tileY).
+ * at: where the anchor goes: between the gate's towers, a little out from their middles, on their
+ * tops (WoW world x north, y west, z up); facing: the way the gate faces (WoW orientation,
+ * degrees); anchor: between his front claws, at the scene's tower tops (model units); scale: model
+ * units to yards (his front claws, as seen, are about 13 units apart, the real towers 79 yards).
+ */
+export const DEATHWING_ON_STORMWIND = {
+	fdid: 466614,
+	mapId: 0,
+	tileX: 30,
+	tileY: 48,
+	batches: [50, 51, 52, 53, 54, 55, 56],
+	at: [-8922.1, 546.1, 162] as const,
+	facing: 218.95,
+	anchor: [2.4, -1.75, 10.3] as const,
+	scale: 6,
+};
+
 /** Tiles x0..x1, y0..y1 (inclusive) of a map's grid. */
 export type TileRect = [number, number, number, number];
 
