@@ -15,6 +15,8 @@ function hidePointer(hidden: boolean): void {
 const MIN_CLEARANCE = 2;
 /** How quickly the cinematic camera catches up with the mouse: about 1/e of the way left after 1/rate seconds. */
 const CINEMATIC_TURN_RATE = 3;
+/** How fast S and F turn the view on the spot (radians a second): 72 degrees a second. */
+const KEY_TURN_RATE = Math.PI * 0.4;
 
 /** A path the camera rides along (a flight path), set with ride(). */
 export interface Ride {
@@ -129,8 +131,10 @@ export class FlyControls {
 				// Only the drag's own lock: one made with Caps Lock stays.
 				if (this.dragLock) {
 					this.dragLock = false;
-					document.documentElement.classList.remove('drag-lock');
+					// The browser lets go of the mouse a moment later; drag-lock (no crosshair) stays
+					// until it has (see pointerlockchange), or the crosshair flashes up in between.
 					if (this.locked) document.exitPointerLock();
+					else document.documentElement.classList.remove('drag-lock');
 				}
 			}
 			if (!(e.buttons & 3)) hidePointer(false);
@@ -359,6 +363,9 @@ export class FlyControls {
 			this.lookPitch = this.pitch;
 			if (f.t >= 1) this.flight = null;
 		} else {
+			// S and F turn the view left and right on the spot.
+			const turn = (this.keys.has('KeyS') ? 1 : 0) - (this.keys.has('KeyF') ? 1 : 0);
+			this.lookYaw += turn * KEY_TURN_RATE * dt;
 			if (this.cinematic) {
 				const ease = 1 - Math.exp(-dt * CINEMATIC_TURN_RATE);
 				this.yaw += (this.lookYaw - this.yaw) * ease;

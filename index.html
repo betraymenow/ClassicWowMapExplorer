@@ -103,7 +103,7 @@
 					<label><input type="checkbox" data-setting="clutter"> Grass and flowers <kbd>V</kbd></label>
 					<label><input type="checkbox" data-setting="collision"> Collision with walls <kbd>G</kbd></label>
 					<label><input type="checkbox" data-setting="cinematic"> Cinematic camera <kbd>J</kbd></label>
-					<label><input type="checkbox" data-setting="grading"> Colour grading <kbd>B</kbd></label>
+					<label><input type="checkbox" data-setting="grading"> Colour grading</label>
 					<label><input type="checkbox" data-setting="shadows"> Shadows</label>
 					<label><input type="checkbox" data-setting="fog"> Fog and sun shafts <kbd>Z</kbd></label>
 					<label title="Lifts every kind of fog, distance, valley, weather and under water, so the far continents show in full"><input type="checkbox" data-setting="clearView"> No fog at all</label>
@@ -120,7 +120,7 @@
 			<details id="sound" name="menu">
 				<summary>Sound</summary>
 				<div class="menu-body panel">
-					<label class="check"><input type="checkbox" id="sound-on"> Music and sound <kbd>M</kbd></label>
+					<label class="check"><input type="checkbox" id="sound-on"> Music and sound</label>
 					<label>Master <input type="range" min="0" max="100" step="1" data-channel="master"><output></output></label>
 					<label>Music <input type="range" min="0" max="100" step="1" data-channel="music"><output></output></label>
 					<label title="Background sounds, weather and under water">Ambience <input type="range" min="0" max="100" step="1" data-channel="ambience"><output></output></label>
@@ -146,7 +146,7 @@
 						<span class="walk-look-buttons"><button id="walk-look-prev" title="Previous look" aria-label="Previous look">&lt;</button><button id="walk-look-next" title="Next look" aria-label="Next look">&gt;</button></span>
 					</div>
 
-					<button id="worldmap-open">World map <kbd>Tab</kbd></button>
+					<button id="worldmap-open">World map <kbd>M</kbd></button>
 					<label><input type="checkbox" id="flights-shown"> Show flight paths</label>
 					<div class="flight-grid">
 						<label for="flight-from">From</label>
@@ -245,6 +245,11 @@
 
 	</div>
 
+	<!-- A whole continent's map, of your own (public/maps), on Shift+B (retail). -->
+	<div id="continent-map" hidden role="dialog" aria-label="Continent map">
+		<img id="continent-map-image" alt="" draggable="false">
+	</div>
+
 	<!-- The game's world map: zone pictures with the explored parts filled in. -->
 	<div id="worldmap" hidden>
 		<div class="worldmap-frame help-card" role="dialog" aria-label="World map">
@@ -254,7 +259,7 @@
 				<span id="worldmap-count" class="muted small"></span>
 				<label class="small"><input type="checkbox" id="worldmap-all"> Show unexplored</label>
 				<button id="worldmap-forget" class="small" title="Start exploring afresh">Forget explored</button>
-				<button id="worldmap-close" class="plain" title="Close (Tab or Esc)" aria-label="Close">×</button>
+				<button id="worldmap-close" class="plain" title="Close (M or Esc)" aria-label="Close">×</button>
 			</header>
 			<canvas id="worldmap-canvas" width="1002" height="668"></canvas>
 			<div id="worldmap-hover" class="muted small"></div>
@@ -279,7 +284,7 @@
 					<div><kbd>Drag</kbd> look around · <kbd>Caps Lock</kbd> lock the mouse to look around · <kbd>Click</kbd> a creature or object for its info · <kbd>Esc</kbd> leave full screen</div>
 					<div><kbd>E</kbd> forward · both mouse buttons fast forward · <kbd>D</kbd> back · <kbd>W</kbd> / <kbd>R</kbd> left / right</div>
 					<div><kbd>Space</kbd> / <kbd>C</kbd> or <kbd>X</kbd> up / down</div>
-					<div><kbd>Shift</kbd> fast · <kbd>Wheel</kbd> zoom</div>
+					<div><kbd>S</kbd> / <kbd>F</kbd> turn left / right · <kbd>Shift</kbd> fast · <kbd>Wheel</kbd> zoom</div>
 					<div><kbd>G</kbd> fly through walls · <kbd>J</kbd> cinematic camera</div>
 				</section>
 				<section>
@@ -296,7 +301,7 @@
 
 					<div><kbd>/</kbd> go to a zone, town, dungeon or raid</div>
 					<div>Click the minimap to fly there</div>
-					<div><kbd>O</kbd> Azeroth as a planet (also by flying very high): drag to turn, <kbd>Wheel</kbd> zoom, double-click or zoom right in to go down · <kbd>1</kbd> / <kbd>2</kbd> continents (retail: <kbd>3</kbd> Zandalar, <kbd>4</kbd> the Maelstrom, <kbd>5</kbd> Deepholm)</div>
+					<div><kbd>O</kbd> Azeroth as a planet (also by flying very high): drag to turn, <kbd>Wheel</kbd> zoom, double-click or zoom right in to go down · <kbd>1</kbd> Kalimdor / <kbd>2</kbd> Eastern Kingdoms (retail: <kbd>3</kbd> Zandalar, <kbd>4</kbd> the Maelstrom, <kbd>5</kbd> Deepholm)</div>
 					<div><kbd>T</kbd> back to the start</div>
 					<div>Click the coordinates to copy a link to the view</div>
 				</section>
@@ -304,10 +309,11 @@
 					<h3>The world</h3>
 					<div><kbd>Y</kbd> / <kbd>Shift</kbd>+<kbd>Y</kbd> later / earlier · <kbd>N</kbd> local time</div>
 					<div><kbd>L</kbd> torch · <kbd>V</kbd> grass and flowers</div>
-					<div><kbd>B</kbd> colour grading · <kbd>Z</kbd> fog</div>
+					<div><kbd>Z</kbd> fog</div>
 					<div><kbd>H</kbd> name colours for Alliance or Horde</div>
-					<div><kbd>I</kbd> dungeon and raid names · <kbd>M</kbd> music and sound</div>
-					<div><kbd>Tab</kbd> world map, filled in where you've explored · <kbd>Esc</kbd> off a flight</div>
+					<div><kbd>I</kbd> dungeon and raid names</div>
+					<div><kbd>M</kbd> world map, filled in where you've explored · <kbd>Esc</kbd> off a flight</div>
+					<div id="continent-map-help"><kbd>Shift</kbd>+<kbd>B</kbd> map of the whole continent (wheel to zoom, drag to move)</div>
 				</section>
 				<section>
 					<h3>Screen</h3>

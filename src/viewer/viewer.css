@@ -1623,6 +1623,34 @@ body.wow-ui {
 	white-space: pre-line;
 }
 
+/* A whole continent's map (Shift+B): over everything, fitted to the screen's height, zoomed and moved by hand. */
+#continent-map {
+	position: fixed;
+	inset: 0;
+	overflow: hidden;
+	background: rgba(0, 0, 0, 0.6);
+	z-index: 6;
+	cursor: grab;
+}
+
+#continent-map[hidden] {
+	display: none;
+}
+
+#continent-map.dragging {
+	cursor: grabbing;
+}
+
+#continent-map-image {
+	position: absolute;
+	left: 0;
+	top: 0;
+	max-width: none;
+	transform-origin: 0 0;
+	user-select: none;
+	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.7);
+}
+
 /* The world map, over everything but the menus, its picture as big as fits. */
 #worldmap {
 	position: fixed;

@@ -424,7 +424,8 @@ const hudFollowers: (() => void)[] = [];
 function setUpView(viewer: Viewer): void {
 	const panel = $('view-panel');
 	const { stats = false, ...settings } = readSaved<SavedView>(VIEW_KEY);
-	viewer.settings = settings;
+	// Colour grading starts on every time, whatever was left saved (it had a key once, B).
+	viewer.settings = { ...settings, grading: true };
 	const statsBox = $<HTMLInputElement>('stats-on');
 	const controls = [...panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')];
 	const remember = () => save(VIEW_KEY, { ...viewer.settings, stats: statsBox.checked });
@@ -744,7 +745,7 @@ function setUpTravel(viewer: Viewer, arrow: HTMLCanvasElement | null): void {
 		map.toggle();
 	});
 	window.addEventListener('keydown', (e) => {
-		if (e.code !== 'Tab' || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+		if (e.code !== 'KeyM' || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 		e.preventDefault();
 		map.toggle();
 	});
@@ -1183,6 +1184,122 @@ window.addEventListener('keydown', (e) => {
 	const hidden = document.body.classList.toggle('ui-hidden');
 	notify(hidden ? 'Interface hidden: U brings it back' : 'Interface shown');
 });
+
+// The planet view starts with the interface hidden, for a clear view of Azeroth, and the world
+// with it shown; U / Alt+Z still turn it on and off in either.
+let globeShown = document.documentElement.classList.contains('globe-view');
+new MutationObserver(() => {
+	const now = document.documentElement.classList.contains('globe-view');
+	if (now === globeShown) return;
+	globeShown = now;
+	document.body.classList.toggle('ui-hidden', now);
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+// --- Continent maps (Shift+B, retail) ---
+
+/**
+ * Pictures of a whole continent, of your own (the game's map art, not published): put in
+ * public/maps, by Map.db2 ID. Shift+B shows the one being looked at.
+ */
+const CONTINENT_MAPS: Record<number, string> = { 0: 'maps/east_kingdom.jpg', 1: 'maps/kalimdore.jpg' };
+/** How far in the picture zooms, past fitting the screen's height. */
+const CONTINENT_MAP_ZOOM = 10;
+
+/** Shift+B: the continent's map over everything, fitted to the screen's height, zoomed with the wheel and moved by dragging. */
+function setUpContinentMap(): void {
+	const box = $('continent-map');
+	const image = $<HTMLImageElement>('continent-map-image');
+	if (!RETAIL) {
+		$('continent-map-help').remove();
+		return;
+	}
+	let scale = 1, fit = 1, x = 0, y = 0;
+	const place = () => (image.style.transform = `translate(${x}px, ${y}px) scale(${scale})`);
+	const fitToScreen = () => {
+		fit = Math.min(box.clientHeight / image.naturalHeight, box.clientWidth / image.naturalWidth);
+		scale = fit;
+		x = (box.clientWidth - image.naturalWidth * scale) / 2;
+		y = (box.clientHeight - image.naturalHeight * scale) / 2;
+		place();
+	};
+	const close = () => (box.hidden = true);
+	const open = () => {
+		const mapId = infoViewer?.viewedMapId ?? null;
+		const file = mapId === null ? undefined : CONTINENT_MAPS[mapId];
+		if (!file) {
+			notify('No map of this area');
+			return;
+		}
+		const url = new URL(file, document.baseURI).href;
+		const show = () => {
+			box.hidden = false;
+			fitToScreen();
+		};
+		if (image.src === url && image.complete && image.naturalWidth) {
+			show();
+			return;
+		}
+		image.onload = show;
+		image.onerror = () => notify(`Map picture missing: put ${file.slice(5)} in public/maps`);
+		image.src = url;
+	};
+
+	// Keys go to the map while it's open, not to flying.
+	window.addEventListener('keydown', (e) => {
+		const toggle = e.code === 'KeyB' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+		if (toggle && !isTyping(e) && $('start').hidden !== false) {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			if (box.hidden) open();
+			else close();
+			return;
+		}
+		if (box.hidden) return;
+		if (e.code === 'Escape') close();
+		e.stopImmediatePropagation();
+	}, true);
+
+	box.addEventListener('wheel', (e) => {
+		e.preventDefault();
+		const next = Math.min(fit * CONTINENT_MAP_ZOOM, Math.max(fit, scale * Math.exp(-e.deltaY * 0.0015)));
+		// Zoomed round the point under the pointer.
+		x = e.clientX - ((e.clientX - x) * next) / scale;
+		y = e.clientY - ((e.clientY - y) * next) / scale;
+		scale = next;
+		place();
+	}, { passive: false });
+
+	// Dragging moves it; a click without dragging off the picture closes it.
+	let drag: { x: number; y: number; moved: boolean } | null = null;
+	box.addEventListener('pointerdown', (e) => {
+		if (e.button !== 0) return;
+		drag = { x: e.clientX, y: e.clientY, moved: false };
+		box.setPointerCapture(e.pointerId);
+	});
+	box.addEventListener('pointermove', (e) => {
+		if (!drag) return;
+		const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+		if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+		drag.moved = true;
+		box.classList.add('dragging');
+		x += dx;
+		y += dy;
+		drag.x = e.clientX;
+		drag.y = e.clientY;
+		place();
+	});
+	box.addEventListener('pointerup', (e) => {
+		const clicked = drag && !drag.moved;
+		drag = null;
+		box.classList.remove('dragging');
+		if (clicked && e.target === box) close();
+	});
+	window.addEventListener('resize', () => {
+		if (!box.hidden) fitToScreen();
+	});
+}
+
+setUpContinentMap();
 
 // --- Screenshots ---
 

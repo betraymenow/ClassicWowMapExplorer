@@ -6,3 +6,6 @@ out/
 
 # Music of your own for the planet view (the game's music: not to be published)
 public/music/
+
+# Continent maps of your own for Shift+B (the game's map art: not to be published)
+public/maps/

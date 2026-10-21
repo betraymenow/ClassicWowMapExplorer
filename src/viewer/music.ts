@@ -18,7 +18,6 @@ const AFTER_INTRO = 2000;
 const VOLUME = 0.5;
 /** Decoded tracks kept as object URLs. */
 const URL_CACHE = 8;
-const STORAGE_KEY = 'mapExplorer.music';
 /** Low-pass cut-off (Hz) for music heard from under water. */
 const MUFFLED = 600;
 const CLEAR = 20000;
@@ -47,7 +46,8 @@ interface Voice {
  * spells between tracks, a fanfare on arriving where there is one, and crossfades between places.
  */
 export class MusicPlayer {
-	private enabledValue = readEnabled();
+	/** On at every start (the Sound menu turns it off for the visit). */
+	private enabledValue = true;
 	private applied: MusicTarget = { set: 0, intro: 0 };
 	private pending: MusicTarget | null = null;
 	private pendingSince = 0;
@@ -97,11 +97,6 @@ export class MusicPlayer {
 
 	set enabled(on: boolean) {
 		this.enabledValue = on;
-		try {
-			localStorage.setItem(STORAGE_KEY, on ? '1' : '0');
-		} catch {
-			// Storage can be unavailable (private windows); the setting just isn't remembered.
-		}
 		if (on) {
 			this.nextAt = 0;
 		} else {
@@ -279,15 +274,6 @@ export class MusicPlayer {
 				this.voices.splice(i, 1);
 			}
 		}
-	}
-}
-
-function readEnabled(): boolean {
-	try {
-		// Muted until turned on; after that the choice is remembered.
-		return localStorage.getItem(STORAGE_KEY) === '1';
-	} catch {
-		return false;
 	}
 }
 

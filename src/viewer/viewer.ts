@@ -252,7 +252,7 @@ export interface ViewSettings {
 	mapNames: boolean;
 	/** Turning glides after the mouse rather than following it at once (J). */
 	cinematic: boolean;
-	/** The game's colour grading for each zone and time of day (B). */
+	/** The game's colour grading for each zone and time of day (View menu; on at every start). */
 	grading: boolean;
 	/** The sun and moon cast shadows (X). */
 	shadows: boolean;
@@ -1367,6 +1367,16 @@ export class Viewer {
 		return `#${index}/${(c.tileX - continent.offsetX).toFixed(3)}/${(c.tileY - continent.offsetY).toFixed(3)}/${Math.round(c.height)}/0/-89`;
 	}
 
+	/**
+	 * The Map.db2 ID of the continent being looked at: the one under the camera, or on the planet
+	 * the one at the view's centre; null over the open sea.
+	 */
+	get viewedMapId(): number | null {
+		if (!this.globe?.active) return this.wowPosition()?.mapId ?? null;
+		const c = this.globe.centre;
+		return this.terrain.locate(c.tileX * TILE_SIZE, c.tileY * TILE_SIZE)?.continent.mapId ?? null;
+	}
+
 	/** Whether Azeroth is being shown as a planet. */
 	get globeShown(): boolean {
 		return this.globe?.active ?? false;
@@ -1490,7 +1500,8 @@ export class Viewer {
 		} else if (e.code === 'Escape' && this.shot) this.endShot();
 		else if (e.code === 'KeyO') this.toggleGlobe();
 		else if (e.code === 'KeyT') this.goToPlanetStart();
-		else if (e.code.startsWith('Digit')) this.goToContinent(Number(e.code.slice(5)) - 1);
+		// 1 Kalimdor, 2 the Eastern Kingdoms (continents 1 and 0), then the rest in order.
+		else if (e.code.startsWith('Digit')) this.goToContinent(({ 1: 1, 2: 0 } as Record<number, number>)[Number(e.code.slice(5))] ?? Number(e.code.slice(5)) - 1);
 		else if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
 			const problem = this.setWalking(!this.walker.active);
 			if (problem) this.onNotice(problem);
@@ -1506,9 +1517,6 @@ export class Viewer {
 		} else if (e.code === 'KeyN') {
 			this.resetTime();
 			this.onChange('time');
-		} else if (e.code === 'KeyM' && this.music) {
-			this.music.enabled = !this.music.enabled;
-			this.onChange('sound');
 		} else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
 			const s = this.settings;
 			const toggles: Record<string, Partial<ViewSettings>> = {
@@ -1517,7 +1525,6 @@ export class Viewer {
 				KeyH: { side: s.side === 'alliance' ? 'horde' : 'alliance' },
 				KeyV: { clutter: !s.clutter },
 				KeyJ: { cinematic: !s.cinematic },
-				KeyB: { grading: !s.grading },
 				KeyZ: { fog: !s.fog },
 			};
 			if (this.mapLabels) toggles.KeyI = { mapNames: !s.mapNames };
