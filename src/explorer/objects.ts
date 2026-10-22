@@ -3,7 +3,7 @@ import { MeshBVH } from 'three-mesh-bvh';
 import type { CascStorage } from '../casc/storage';
 import { chunks } from '../formats/chunks';
 import { Blend, M2_MATERIAL_TWO_SIDED, M2_MATERIAL_UNFOGGED, M2_MATERIAL_UNLIT, parseM2, parseSkin, type ColorKeys, type M2File, type M2Skin } from '../formats/m2';
-import { attachmentPoints, sequenceAnimation, skinVertex, standAnimation, standPose, type AnimationClip, type AttachmentPoint, type BoneAnimation } from '../formats/m2Pose';
+import { attachmentPoints, sequenceAnimation, skinVertex, standAnimation, standPose, standVariations, type AnimationClip, type AttachmentPoint, type BoneAnimation } from '../formats/m2Pose';
 import { parseParticleEmitters, type ParticleEmitter } from '../formats/m2Particles';
 import {
 	parseWmoGroup, parseWmoRoot, WMO_GROUP_INTERIOR, WMO_LIQUID_CELL, type WmoGroup, visibleWmoGroups, WMO_MATERIAL_TWO_SIDED, WMO_MATERIAL_UNFOGGED, WMO_MATERIAL_UNLIT,
@@ -244,6 +244,9 @@ const SECOND_TEXTURE_MODELS = new Set(SWORD_OF_SARGERAS.effects);
 /** Models drawn only in part (see M2Options.batches): Deathwing out of the login screen's scene. */
 const MODEL_PARTS = new Map<number, number[]>([[DEATHWING_ON_STORMWIND.fdid, DEATHWING_ON_STORMWIND.batches]]);
 
+/** Models that play all their idles (Stand variations) one after another rather than the first alone: Deathwing on Stormwind's gate. */
+const STAND_VARIATION_MODELS = new Set([DEATHWING_ON_STORMWIND.fdid]);
+
 /** A gear model (helmet, shoulder, weapon) and its texture, at an M2 attachment point. */
 export interface GearAttachment {
 	point: number;
@@ -301,7 +304,7 @@ function prepareM2(storage: CascStorage, fdid: number, stand: boolean, file?: Ui
 		const v = new DataView(vertices.buffer, vertices.byteOffset, vertices.byteLength);
 		// Moving models are skinned on the GPU from bind space; still ones are posed here once.
 		// Creatures (posed standing) also get their walk, for those that roam.
-		const animation = clips ? sequenceAnimation(bytes, m2.md20, clips) : standAnimation(bytes, m2.md20, stand);
+		const animation = clips ? sequenceAnimation(bytes, m2.md20, clips) : STAND_VARIATION_MODELS.has(fdid) ? standVariations(bytes, m2.md20) : standAnimation(bytes, m2.md20, stand);
 		const bones = !animation && stand ? standPose(bytes, m2.md20) : null;
 		const boneIndex = animation ? new Uint16Array(n * 4) : null;
 		const boneWeight = animation ? new Uint8Array(n * 4) : null;

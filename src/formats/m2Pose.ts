@@ -281,6 +281,43 @@ export function sequenceAnimation(bytes: Uint8Array, md20: number, ids: number[]
 	return { bones, clips, data };
 }
 
+/**
+ * All of a model's Stand variations (its idles, as the game picks between at random) played one
+ * after another, as one long loop for GPU skinning: each sampled at the same rate, so each keeps
+ * its own pace. Null when the model has none with keys of its own.
+ */
+export function standVariations(bytes: Uint8Array, md20: number, rate = SAMPLES_PER_SECOND): BoneAnimation | null {
+	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+	const u32 = (o: number) => view.getUint32(md20 + o, true);
+	const boneCount = u32(0x2c);
+	const seqCount = u32(0x1c);
+	const seqOffset = u32(0x20);
+	if (!boneCount) return null;
+	const globalLoops = Array.from({ length: u32(0x14) }, (_, k) => view.getUint32(md20 + u32(0x18) + k * 4, true));
+	const parts: Float32Array[] = [];
+	let frames = 0;
+	let duration = 0;
+	for (let i = 0; i < seqCount; i++) {
+		const o = md20 + seqOffset + i * SEQUENCE_SIZE;
+		if (view.getUint16(o, true) !== ANIM_STAND || !(view.getUint32(o + 12, true) & SEQUENCE_EMBEDDED)) continue;
+		const s: StandSequence = { view, md20, seq: i, duration: view.getUint32(o + 4, true), boneCount, boneOffset: u32(0x30), globalLoops, speed: view.getFloat32(o + 8, true) };
+		if (s.duration < 50) continue;
+		const loop = sampleLoop(s, rate, Infinity);
+		parts.push(loop.data);
+		frames += loop.frames;
+		duration += s.duration / 1000;
+	}
+	if (!parts.length) return null;
+	const data = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+	let at = 0;
+	for (const p of parts) {
+		data.set(p, at);
+		at += p.length;
+	}
+	const clip = { row: 0, frames, duration };
+	return { bones: boneCount, clips: [clip, clip], data };
+}
+
 /** One loop's frames, and whether anything in it moves. */
 function sampleLoop(s: StandSequence, rate = SAMPLES_PER_SECOND, maxFrames = MAX_FRAMES): { frames: number; data: Float32Array; moving: boolean } {
 	const frames = Math.max(2, Math.min(maxFrames, Math.round((s.duration / 1000) * rate)));
