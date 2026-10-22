@@ -1202,15 +1202,17 @@ new MutationObserver(() => {
 const SAVED_VIEWS_KEY = `mapExplorer.savedViews.${RETAIL ? 'retail' : 'classic'}`;
 const SAVED_VIEW_SLOTS = 9;
 
-/** A view saved to come back to: its name (yours), where and which way, and the time of day (null: local time). */
+/**
+ * A view saved to come back to: its name (yours), and where and which way it looks. Not the time
+ * of day: going back keeps the time as it is now.
+ */
 interface Bookmark {
 	name: string;
 	hash: string;
 	planet: boolean;
-	time: number | null;
 }
 
-/** Saved views: Ctrl+number saves this one (place, angle and time of day), Shift+number goes back; named and kept in Travel. */
+/** Saved views: Ctrl+number saves this one (place and angle), Shift+number goes back; named and kept in Travel. */
 function setUpSavedViews(viewer: Viewer): void {
 	const stored = readSaved<(Bookmark | null)[]>(SAVED_VIEWS_KEY);
 	const slots: (Bookmark | null)[] = Array.from({ length: SAVED_VIEW_SLOTS }, (_, i) => (Array.isArray(stored) ? stored[i] ?? null : null));
@@ -1234,7 +1236,7 @@ function setUpSavedViews(viewer: Viewer): void {
 			notify('Can’t save this view');
 			return;
 		}
-		slots[i] = { name: slots[i]?.name ?? '', ...view, time: viewer.timeIsLocal ? null : viewer.timeMinutes };
+		slots[i] = { name: slots[i]?.name ?? '', ...view };
 		remember();
 		sync(i);
 		notify(`Saved as ${label(i)}`);
@@ -1249,8 +1251,6 @@ function setUpSavedViews(viewer: Viewer): void {
 			notify(`Can’t go to ${label(i)} from here`);
 			return;
 		}
-		if (slot.time === null) viewer.resetTime();
-		else viewer.timeMinutes = slot.time;
 		closeMenu();
 		notify(`Going to ${label(i)}`);
 	};
