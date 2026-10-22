@@ -329,6 +329,7 @@ async function explore(): Promise<void> {
 		setUpTravel(viewer, minimapArrow);
 		setUpWalking(viewer);
 		setUpSound(viewer);
+		setUpSavedViews(viewer);
 		setUpHelp();
 	} catch (e) {
 		setStatus(`Could not start: ${(e as Error).message}`, true);
@@ -1194,6 +1195,117 @@ new MutationObserver(() => {
 	globeShown = now;
 	document.body.classList.toggle('ui-hidden', now);
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+// --- Saved views (Ctrl+1-9 save, Shift+1-9 go) ---
+
+/** Each edition its own: their lands differ. */
+const SAVED_VIEWS_KEY = `mapExplorer.savedViews.${RETAIL ? 'retail' : 'classic'}`;
+const SAVED_VIEW_SLOTS = 9;
+
+/** A view saved to come back to: its name (yours), where and which way, and the time of day (null: local time). */
+interface Bookmark {
+	name: string;
+	hash: string;
+	planet: boolean;
+	time: number | null;
+}
+
+/** Saved views: Ctrl+number saves this one (place, angle and time of day), Shift+number goes back; named and kept in Travel. */
+function setUpSavedViews(viewer: Viewer): void {
+	const stored = readSaved<(Bookmark | null)[]>(SAVED_VIEWS_KEY);
+	const slots: (Bookmark | null)[] = Array.from({ length: SAVED_VIEW_SLOTS }, (_, i) => (Array.isArray(stored) ? stored[i] ?? null : null));
+	const remember = () => save(SAVED_VIEWS_KEY, slots);
+	const label = (i: number) => slots[i]?.name || `View ${i + 1}`;
+
+	const list = $('saved-views');
+	const names: HTMLInputElement[] = [];
+	const goes: HTMLButtonElement[] = [];
+	const clears: HTMLButtonElement[] = [];
+	const sync = (i: number) => {
+		names[i].value = slots[i]?.name ?? '';
+		names[i].disabled = !slots[i];
+		names[i].placeholder = slots[i] ? `View ${i + 1}` : 'Empty';
+		goes[i].disabled = clears[i].disabled = !slots[i];
+	};
+
+	const store = (i: number) => {
+		const view = viewer.savedView();
+		if (!view) {
+			notify('Can’t save this view');
+			return;
+		}
+		slots[i] = { name: slots[i]?.name ?? '', ...view, time: viewer.timeIsLocal ? null : viewer.timeMinutes };
+		remember();
+		sync(i);
+		notify(`Saved as ${label(i)}`);
+	};
+	const go = (i: number) => {
+		const slot = slots[i];
+		if (!slot) {
+			notify(`Nothing saved in ${i + 1}: Ctrl+${i + 1} saves this view there`);
+			return;
+		}
+		if (!viewer.goToSavedView(slot)) {
+			notify(`Can’t go to ${label(i)} from here`);
+			return;
+		}
+		if (slot.time === null) viewer.resetTime();
+		else viewer.timeMinutes = slot.time;
+		closeMenu();
+		notify(`Going to ${label(i)}`);
+	};
+
+	for (let i = 0; i < SAVED_VIEW_SLOTS; i++) {
+		const key = document.createElement('span');
+		key.className = 'saved-key';
+		key.textContent = String(i + 1);
+		const name = document.createElement('input');
+		name.type = 'text';
+		name.maxLength = 40;
+		name.setAttribute('aria-label', `Name of view ${i + 1}`);
+		name.addEventListener('input', () => {
+			if (!slots[i]) return;
+			slots[i]!.name = name.value.trim();
+			remember();
+		});
+		name.addEventListener('keydown', (e) => {
+			if (e.code === 'Enter') name.blur();
+		});
+		const goButton = document.createElement('button');
+		goButton.textContent = 'Go';
+		goButton.title = `Go there (Shift+${i + 1})`;
+		goButton.addEventListener('click', () => go(i));
+		const saveButton = document.createElement('button');
+		saveButton.textContent = 'Save';
+		saveButton.title = `Save the current view here (Ctrl+${i + 1})`;
+		saveButton.addEventListener('click', () => store(i));
+		const clear = document.createElement('button');
+		clear.textContent = '×';
+		clear.title = 'Forget this view';
+		clear.setAttribute('aria-label', `Forget view ${i + 1}`);
+		clear.addEventListener('click', () => {
+			slots[i] = null;
+			remember();
+			sync(i);
+		});
+		list.append(key, name, goButton, saveButton, clear);
+		names.push(name);
+		goes.push(goButton);
+		clears.push(clear);
+		sync(i);
+	}
+
+	window.addEventListener('keydown', (e) => {
+		const digit = /^Digit([1-9])$/.exec(e.code);
+		if (!digit || isTyping(e) || e.altKey || e.metaKey || $('start').hidden === false) return;
+		const i = Number(digit[1]) - 1;
+		if (e.ctrlKey && !e.shiftKey) store(i);
+		else if (e.shiftKey && !e.ctrlKey) go(i);
+		else return;
+		// Not the browser's own Ctrl+number (switching tabs) in a browser window.
+		e.preventDefault();
+	});
+}
 
 // --- Continent maps (Shift+B, retail) ---
 

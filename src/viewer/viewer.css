@@ -1594,6 +1594,33 @@ body.wow-ui {
 	gap: 6px;
 }
 
+/* Saved views: number, name, then Go, Save and clear. */
+#saved-views {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+	align-items: center;
+	gap: 3px 4px;
+}
+
+#saved-views .saved-key {
+	min-width: 1.2em;
+	text-align: center;
+	font-size: 12px;
+	opacity: 0.8;
+}
+
+#saved-views input {
+	width: 100%;
+	min-width: 0;
+	padding: 1px 4px;
+	font-size: 12px;
+}
+
+#saved-views button {
+	padding: 1px 6px;
+	font-size: 12px;
+}
+
 .flight-buttons button {
 	flex: 1;
 }

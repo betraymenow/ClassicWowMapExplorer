@@ -1334,6 +1334,38 @@ export class Viewer {
 	}
 
 	/**
+	 * This view, to come back to later (see goToSavedView): as a URL hash, and whether it's on the
+	 * planet (the hash then its centre, '' where it can't be one: its starting point); null where
+	 * it can't be placed.
+	 */
+	savedView(): { hash: string; planet: boolean } | null {
+		const planet = this.planetHandoff();
+		if (planet !== null) return { hash: planet, planet: true };
+		const hash = this.viewHash();
+		return hash ? { hash, planet: false } : null;
+	}
+
+	/**
+	 * Back to a saved view (see savedView): flown to on the same map, jumped to across maps, or the
+	 * planet shown there. False when the view can't be placed (its map isn't loaded here).
+	 */
+	goToSavedView(view: { hash: string; planet: boolean }): boolean {
+		if (view.planet) {
+			this.showPlanetAt(view.hash);
+			return true;
+		}
+		const to = this.viewFromHash(view.hash);
+		if (!to) return false;
+		if (this.globe?.active) {
+			this.closeGlobe();
+			this.controls.set(to.position, to.yaw, to.pitch);
+		} else {
+			this.travelTo(to.position, to.yaw, to.pitch);
+		}
+		return true;
+	}
+
+	/**
 	 * The planet view centred on a view (as a URL hash), or its starting point without one (or
 	 * where the hash can't be placed): for arriving from the other edition in the planet view.
 	 */
@@ -1501,7 +1533,7 @@ export class Viewer {
 		else if (e.code === 'KeyO') this.toggleGlobe();
 		else if (e.code === 'KeyT') this.goToPlanetStart();
 		// 1 Kalimdor, 2 the Eastern Kingdoms (continents 1 and 0), then the rest in order.
-		else if (e.code.startsWith('Digit')) this.goToContinent(({ 1: 1, 2: 0 } as Record<number, number>)[Number(e.code.slice(5))] ?? Number(e.code.slice(5)) - 1);
+		else if (e.code.startsWith('Digit') && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) this.goToContinent(({ 1: 1, 2: 0 } as Record<number, number>)[Number(e.code.slice(5))] ?? Number(e.code.slice(5)) - 1);
 		else if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
 			const problem = this.setWalking(!this.walker.active);
 			if (problem) this.onNotice(problem);
