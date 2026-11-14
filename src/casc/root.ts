@@ -40,9 +40,15 @@ export class RootTable {
 		r.seek(headerSize);
 		const allowUnnamed = totalCount !== namedCount;
 
+		// English first; every other locale's records after, so where only another language is
+		// installed (a Korean client, say) its files are found too: the storage takes the first
+		// variant that is actually installed.
 		const recFdid: number[] = [];
 		const recCkey: number[] = [];
 		const recHashOff: number[] = [];
+		const otherFdid: number[] = [];
+		const otherCkey: number[] = [];
+		const otherHashOff: number[] = [];
 		while (r.remaining > 0) {
 			const count = r.u32();
 			let contentFlags: number;
@@ -66,14 +72,21 @@ export class RootTable {
 			const hashStart = r.pos;
 			if (hasNames) r.skip(count * 8);
 
-			if (!(localeFlags & LOCALE_ENUS) || contentFlags & CONTENT_LOW_VIOLENCE) continue;
+			if (contentFlags & CONTENT_LOW_VIOLENCE) continue;
+			const english = !!(localeFlags & LOCALE_ENUS);
+			const [ids, ckeys, hashes] = english ? [recFdid, recCkey, recHashOff] : [otherFdid, otherCkey, otherHashOff];
 			let fdid = -1;
 			for (let i = 0; i < count; i++) {
 				fdid += r.view.getInt32(idStart + i * 4, true) + 1;
-				recFdid.push(fdid);
-				recCkey.push(ckeyStart + i * 16);
-				recHashOff.push(hasNames ? hashStart + i * 8 : -1);
+				ids.push(fdid);
+				ckeys.push(ckeyStart + i * 16);
+				hashes.push(hasNames ? hashStart + i * 8 : -1);
 			}
+		}
+		for (let i = 0; i < otherFdid.length; i++) {
+			recFdid.push(otherFdid[i]);
+			recCkey.push(otherCkey[i]);
+			recHashOff.push(otherHashOff[i]);
 		}
 
 		// Sort records by fdid (ties by record order) with a single numeric typed-array sort.
