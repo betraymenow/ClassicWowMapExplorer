@@ -76,10 +76,10 @@ export class FlyControls {
 		private readonly element: HTMLElement,
 	) {
 
-		// Looking around: drag with the left button held (pressed over the view, then anywhere), or
-		// just move the mouse while it's locked (Caps Lock).
+		// Looking around: drag with the left or right button held (pressed over the view, then
+		// anywhere), or just move the mouse while it's locked (Caps Lock).
 		document.addEventListener('mousemove', (e) => {
-			if (!(e.buttons & 1)) this.dragging = false;
+			if (!(e.buttons & 3)) this.dragging = false;
 			if (!this.enabled || !(this.dragging || this.locked)) return;
 			// Browsers now and then report a bogus jump (the hidden cursor being recentred), which
 			// would snap the view; no real flick covers a third of the window in one event.
@@ -115,7 +115,7 @@ export class FlyControls {
 				this.dragDistance = 0;
 			}
 			this.buttons = e.buttons;
-			if (e.button === 0) this.dragging = true;
+			if (e.button === 0 || e.button === 2) this.dragging = true;
 			if ((e.buttons & 3) === 3 && this.enabled) {
 				this.chorded = true;
 				hidePointer(true);
@@ -126,7 +126,7 @@ export class FlyControls {
 		});
 		document.addEventListener('mouseup', (e) => {
 			this.buttons = e.buttons;
-			if (!(e.buttons & 1)) {
+			if (!(e.buttons & 3)) {
 				this.dragging = false;
 				// Only the drag's own lock: one made with Caps Lock stays.
 				if (this.dragLock) {

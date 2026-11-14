@@ -1650,6 +1650,33 @@ body.wow-ui {
 	white-space: pre-line;
 }
 
+/* A yes-or-no question over everything (overwriting a saved view). */
+#confirm {
+	position: fixed;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.35);
+	z-index: 7;
+}
+
+#confirm[hidden] {
+	display: none;
+}
+
+#confirm .confirm-card {
+	width: min(360px, 100%);
+	display: grid;
+	gap: 12px;
+	text-align: center;
+}
+
+#confirm p {
+	margin: 0;
+	white-space: pre-line;
+}
+
 /* A whole continent's map (Shift+B): over everything, fitted to the screen's height, zoomed and moved by hand. */
 #continent-map {
 	position: fixed;

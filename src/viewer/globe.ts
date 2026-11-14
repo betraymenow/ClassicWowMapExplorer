@@ -211,11 +211,11 @@ export class Globe {
 		this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('255,248,230', 0.16), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
 		this.scene.add(this.sunGlow);
 
-		// Dragging turns the planet. As on the flat world (see FlyControls), past a few pixels the
-		// pointer is hidden and the mouse locked for the drag, so the pointer is back where the press
-		// was when the button comes up (the browser restores it on unlock).
+		// Dragging (left or right button) turns the planet. As on the flat world (see FlyControls),
+		// past a few pixels the pointer is hidden and the mouse locked for the drag, so the pointer is
+		// back where the press was when the button comes up (the browser restores it on unlock).
 		element.addEventListener('pointerdown', (e) => {
-			if (!this.active || e.button !== 0) return;
+			if (!this.active || (e.button !== 0 && e.button !== 2)) return;
 			this.drag = { moved: 0 };
 		});
 		window.addEventListener('pointermove', (e) => {
@@ -234,7 +234,7 @@ export class Globe {
 			this.moveView(this.view.x - e.movementX * k, this.view.y - e.movementY * k);
 		});
 		window.addEventListener('pointerup', (e) => {
-			if (e.button === 0) this.endDrag();
+			if (!(e.buttons & 3)) this.endDrag();
 		});
 		window.addEventListener('blur', () => this.endDrag());
 		// Let go before the lock took (a quick drag): release it as soon as it comes.

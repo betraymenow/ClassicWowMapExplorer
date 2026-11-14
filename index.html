@@ -247,6 +247,14 @@
 
 	</div>
 
+	<!-- Asks before a saved view is overwritten (see setUpSavedViews). -->
+	<div id="confirm" hidden>
+		<div class="confirm-card help-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-text">
+			<p id="confirm-text"></p>
+			<div class="flight-buttons"><button id="confirm-yes" class="primary">예 <kbd>Y</kbd></button> <button id="confirm-no">아니오 <kbd>N</kbd></button></div>
+		</div>
+	</div>
+
 	<!-- A whole continent's map, of your own (public/maps), on Shift+B (retail). -->
 	<div id="continent-map" hidden role="dialog" aria-label="Continent map">
 		<img id="continent-map-image" alt="" draggable="false">

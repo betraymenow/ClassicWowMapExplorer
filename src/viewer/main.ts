@@ -196,11 +196,13 @@ async function useSource(init: SourceInit): Promise<void> {
 		const select = $<HTMLSelectElement>('product');
 		select.replaceChildren(...products.map((p) => new Option(`${p.product} ${p.version}`, p.product)));
 		// Classic prefers a vanilla build (the continent file IDs are the classic ones): Classic Era
-		// first, as "wow_classic" is the progression realms (Mists of Pandaria Classic and so on),
-		// with Cataclysm's world. Retail takes the live game.
+		// first, then WoW Forever ("wowf", where an install may have only that), as "wow_classic" is
+		// the progression realms (Mists of Pandaria Classic and so on), with Cataclysm's world.
+		// Retail takes the live game.
 		const preferred = RETAIL
 			? products.find((p) => p.product === 'wow')
 			: products.find((p) => p.product === 'wow_classic_era')
+				?? products.find((p) => p.product === 'wowf')
 				?? products.find((p) => p.product === 'wow_classic_beta')
 				?? products.find((p) => p.product.startsWith('wow_classic'));
 		if (preferred) {
@@ -1230,6 +1232,17 @@ function setUpSavedViews(viewer: Viewer): void {
 		goes[i].disabled = clears[i].disabled = !slots[i];
 	};
 
+	// Asks first when there's a view saved there already.
+	const saveTo = (i: number) => {
+		if (!slots[i]) {
+			store(i);
+			return;
+		}
+		const name = slots[i]!.name;
+		void ask(`${i + 1}번${name ? ` "${name}"` : ''}에 이미 저장된 시점이 있습니다.\n덮어쓰시겠습니까?`).then((yes) => {
+			if (yes) store(i);
+		});
+	};
 	const store = (i: number) => {
 		const view = viewer.savedView();
 		if (!view) {
@@ -1278,7 +1291,7 @@ function setUpSavedViews(viewer: Viewer): void {
 		const saveButton = document.createElement('button');
 		saveButton.textContent = 'Save';
 		saveButton.title = `Save the current view here (Ctrl+${i + 1})`;
-		saveButton.addEventListener('click', () => store(i));
+		saveButton.addEventListener('click', () => saveTo(i));
 		const clear = document.createElement('button');
 		clear.textContent = '×';
 		clear.title = 'Forget this view';
@@ -1299,11 +1312,43 @@ function setUpSavedViews(viewer: Viewer): void {
 		const digit = /^Digit([1-9])$/.exec(e.code);
 		if (!digit || isTyping(e) || e.altKey || e.metaKey || $('start').hidden === false) return;
 		const i = Number(digit[1]) - 1;
-		if (e.ctrlKey && !e.shiftKey) store(i);
+		if (e.ctrlKey && !e.shiftKey) saveTo(i);
 		else if (e.shiftKey && !e.ctrlKey) go(i);
 		else return;
 		// Not the browser's own Ctrl+number (switching tabs) in a browser window.
 		e.preventDefault();
+	});
+}
+
+/**
+ * Asks a yes-or-no question over everything (see #confirm), resolving true for yes: Y or Enter
+ * says yes, N or Esc no; other keys are held back from the world meanwhile.
+ */
+function ask(question: string): Promise<boolean> {
+	const box = $('confirm');
+	const yes = $<HTMLButtonElement>('confirm-yes');
+	const no = $<HTMLButtonElement>('confirm-no');
+	$('confirm-text').textContent = question;
+	// A locked mouse (Caps Lock) can't reach the buttons.
+	if (document.pointerLockElement) document.exitPointerLock();
+	box.hidden = false;
+	yes.focus();
+	return new Promise((resolve) => {
+		const done = (answer: boolean) => {
+			box.hidden = true;
+			window.removeEventListener('keydown', onKey, true);
+			yes.onclick = no.onclick = null;
+			resolve(answer);
+		};
+		const onKey = (e: KeyboardEvent) => {
+			e.stopImmediatePropagation();
+			e.preventDefault();
+			if (e.code === 'KeyY' || e.code === 'Enter' || e.code === 'NumpadEnter') done(true);
+			else if (e.code === 'KeyN' || e.code === 'Escape') done(false);
+		};
+		window.addEventListener('keydown', onKey, true);
+		yes.onclick = () => done(true);
+		no.onclick = () => done(false);
 	});
 }
 
